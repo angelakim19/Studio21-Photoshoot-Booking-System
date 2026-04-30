@@ -59,7 +59,7 @@ export default function LandingPage() {
         {/* Hero Section */}
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-white via-white/95 to-transparent z-10" />
-          <div className="absolute right-0 top-0 w-full md:w-2/3 h-full">
+          <div className="absolute right-0 top-0 w-full md:w-2/3 h-full overflow-hidden">
             <Image
               src="/images/studio.jpg"
               alt="Studio 21 Interior"

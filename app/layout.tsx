@@ -17,8 +17,6 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: 'Studio 21 | Professional Photoshoot Booking',
   description: 'Book professional photoshoots, makeup services, and studio rentals at Studio 21. Easy online scheduling with instant confirmation.',
-  
-  // ✅ FIXED ICON (your logo)
   icons: {
     icon: '/favicon.png',
   },
@@ -31,7 +29,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${poppins.variable} ${playfair.variable} bg-background`}>
-      <body className="font-sans antialiased min-h-screen">
+      <body className="font-sans antialiased min-h-screen overflow-x-hidden">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
