@@ -54,13 +54,13 @@ export default function SignupPage() {
       <div className="flex-1 flex flex-col">
         <div className="p-6 flex justify-end lg:justify-start">
           <Link href="/" className="flex items-center gap-3 w-fit">
-            <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-0McGs7RZl6BZHsb6KgS3JK5SUdnNz1.png"
-              alt="Studio 21 Logo"
-              width={40}
-              height={40}
-              className="rounded-full"
-            />
+          <Image
+                  src="/favicon.png"
+                  alt="Studio 21 Logo"
+                  width={45}
+                  height={45}
+                  className="rounded-full"
+                />  
             <span className="font-serif text-xl font-semibold text-[#1a1a1a]">Studio 21</span>
           </Link>
         </div>
