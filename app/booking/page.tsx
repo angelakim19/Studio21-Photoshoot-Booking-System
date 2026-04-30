@@ -26,13 +26,13 @@ export default function BookingPage() {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-20">
             <Link href="/" className="flex items-center gap-3">
-              <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-0McGs7RZl6BZHsb6KgS3JK5SUdnNz1.png"
-                alt="Studio 21 Logo"
-                width={45}
-                height={45}
-                className="rounded-full"
-              />
+                <Image
+                  src="/favicon.png"
+                  alt="Studio 21 Logo"
+                  width={45}
+                  height={45}
+                  className="rounded-full"
+                />
               <span className="font-serif text-xl font-semibold text-[#1a1a1a]">Studio 21</span>
             </Link>
             <span className="text-sm text-muted-foreground font-medium">Book a Session</span>
