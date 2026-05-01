@@ -1,3 +1,6 @@
+"use client";
+import { useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link"
 import Image from "next/image"
 import { Camera, Palette, Building, CalendarCheck, Clock, CheckCircle, ArrowRight, Sparkles, Star } from "lucide-react"
