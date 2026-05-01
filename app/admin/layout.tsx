@@ -3,7 +3,13 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Calendar, Users, BarChart3, Settings } from "lucide-react"
+import {
+  Calendar,
+  CalendarDays,
+  Users,
+  BarChart3,
+  Settings,
+} from "lucide-react"
 
 export default function AdminLayout({
   children,
@@ -14,6 +20,10 @@ export default function AdminLayout({
 
   const menu = [
     { name: "Calendar", href: "/admin", icon: Calendar },
+
+    // ✅ NEW: Appointments
+    { name: "Appointments", href: "/admin/appointments", icon: CalendarDays },
+
     { name: "Clients", href: "/admin/clients", icon: Users },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { name: "Settings", href: "#", icon: Settings },
@@ -21,10 +31,10 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen">
-
+      
       {/* SIDEBAR */}
       <aside className="w-[300px] bg-[#111111] text-white p-6 flex flex-col justify-between">
-
+        
         <div>
           {/* LOGO */}
           <div className="flex items-center gap-3 mb-8">
