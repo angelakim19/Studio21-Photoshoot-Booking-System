@@ -1,5 +1,6 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link"
 import Image from "next/image"
@@ -14,19 +15,19 @@ const services = [
     icon: Camera,
     title: "Professional Photoshoot",
     description: "High-quality photography with professional lighting and equipment. Perfect for portfolios, headshots, and creative projects.",
-    price: "From $150",
+    price: "From ₱ 6,000",
   },
   {
     icon: Palette,
     title: "Makeup Services",
     description: "Expert makeup artists to ensure you look your absolute best. Available as standalone service or add-on to any shoot.",
-    price: "From $75",
+    price: "From ₱ 1,200",
   },
   {
     icon: Building,
     title: "Studio Rental",
     description: "Rent our fully-equipped studio space for your own projects. Includes lighting equipment and backdrop options.",
-    price: "From $100/hr",
+    price: "From ₱ 500 - ₱ 700/hr",
   },
 ]
 
@@ -54,6 +55,27 @@ const steps = [
 ]
 
 export default function LandingPage() {
+  const [user, setUser] = useState<any>(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
+    };
+
+    getUser();
+  }, []);
+
+  const handleBooking = () => {
+    if (!user) {
+      setShowPopup(true);
+    } else {
+      router.push("/booking");
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
@@ -86,11 +108,13 @@ export default function LandingPage() {
                 Our luxurious facilities and expert team ensure stunning results every time.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button size="lg" asChild className="bg-[#C8A96A] hover:bg-[#B8995A] text-white shadow-lg shadow-[#C8A96A]/25 px-8">
-                  <Link href="/booking">
-                    Book Your Session
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
+                <Button
+                  size="lg"
+                  onClick={handleBooking}
+                  className="bg-[#C8A96A] hover:bg-[#B8995A] text-white shadow-lg shadow-[#C8A96A]/25 px-8"
+                >
+                  Book Your Session
+                  <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
                 <Button size="lg" variant="outline" asChild className="border-[#C8A96A]/30 text-[#1a1a1a] hover:bg-[#C8A96A]/5 hover:border-[#C8A96A]">
                   <Link href="#services">View Services</Link>
@@ -144,11 +168,14 @@ export default function LandingPage() {
                   <CardContent>
                     <div className="flex items-center justify-between pt-4 border-t border-border">
                       <span className="font-semibold text-[#C8A96A]">{service.price}</span>
-                      <Button variant="ghost" size="sm" asChild className="text-[#1a1a1a] hover:text-[#C8A96A] hover:bg-[#C8A96A]/5">
-                        <Link href="/booking">
-                          Book Now
-                          <ArrowRight className="ml-1 h-4 w-4" />
-                        </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleBooking}
+                        className="text-[#1a1a1a] hover:text-[#C8A96A] hover:bg-[#C8A96A]/5"
+                      >
+                        Book Now
+                        <ArrowRight className="ml-1 h-4 w-4" />
                       </Button>
                     </div>
                   </CardContent>
@@ -275,7 +302,7 @@ export default function LandingPage() {
               <span className="text-[#C8A96A] text-sm font-medium uppercase tracking-wider">Visit Us</span>
               <h2 className="font-serif text-3xl md:text-4xl font-semibold mt-3 mb-4 text-[#1a1a1a]">Find Our Studio</h2>
               <p className="text-muted-foreground">
-                Conveniently located in the heart of the city
+                Conveniently located in the heart of Valencia City
               </p>
             </div>
 
@@ -288,7 +315,7 @@ export default function LandingPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-[#1a1a1a] mb-1">Studio Address</h3>
-                      <p className="text-muted-foreground">123 Creative Ave, New York, NY 10001</p>
+                      <p className="text-muted-foreground">P10 Poblacion Quillo Bldg., Valencia City, Bukidnon, Philippines 8709</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
@@ -297,22 +324,23 @@ export default function LandingPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-[#1a1a1a] mb-1">Opening Hours</h3>
-                      <p className="text-muted-foreground">Mon-Fri: 9AM-8PM | Sat: 10AM-6PM | Sun: 11AM-5PM</p>
+                      <p className="text-muted-foreground">Mon-Fri: 8AM-10PM | Sat & Sun: 7AM-11PM </p>
                     </div>
                   </div>
                   <Button asChild className="bg-[#C8A96A] hover:bg-[#B8995A] text-white mt-4">
-                    <Link href="https://maps.google.com" target="_blank">
+                    <Link href="https://www.google.com/maps/search/?api=1&query=7.9046019,125.0841386" target="_blank">
                       Get Directions
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
                 </div>
-                <div className="bg-white rounded-2xl aspect-video flex items-center justify-center shadow-inner">
-                  <div className="text-center text-muted-foreground">
-                    <Building className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p className="font-medium">Map Integration</p>
-                    <p className="text-sm">Coming Soon</p>
-                  </div>
+                <div className="bg-white rounded-2xl aspect-video shadow-inner overflow-hidden">
+                  <iframe
+                    src="https://www.google.com/maps/embed?pb=!4v1777625698062!6m8!1m7!1sYoQZdQcZMXkcb8JBLXcxBA!2m2!1d7.904601888060517!2d125.0841386471947!3f339.24!4f-0.5400000000000063!5f0.7820865974627469"
+                    className="w-full h-full"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                  />
                 </div>
               </div>
             </div>
@@ -337,16 +365,48 @@ export default function LandingPage() {
             <p className="text-white/70 mb-10 max-w-xl mx-auto">
               Join hundreds of satisfied clients who have captured their perfect moments at Studio 21.
             </p>
-            <Button size="lg" asChild className="bg-[#C8A96A] hover:bg-[#B8995A] text-white shadow-lg shadow-[#C8A96A]/25 px-10">
-              <Link href="/booking">
-                Book Your Session Now
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
+            <Button
+              size="lg"
+              onClick={handleBooking}
+              className="bg-[#C8A96A] hover:bg-[#B8995A] text-white shadow-lg shadow-[#C8A96A]/25 px-10"
+            >
+              Book Your Session Now
+              <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </div>
         </section>
       </main>
+      {showPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-[90%] max-w-sm text-center shadow-xl">
+            
+            <h2 className="text-lg font-semibold mb-2 text-[#1a1a1a]">
+              Login Required
+            </h2>
 
+            <p className="text-sm text-gray-500 mb-6">
+              You need to log in first before booking a session.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPopup(false)}
+                className="flex-1 py-2 rounded-lg border text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => router.push("/login")}
+                className="flex-1 py-2 rounded-lg bg-[#C8A96A] text-white hover:bg-[#B8995A]"
+              >
+                Go to Login
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}          
       <Footer />
     </div>
   )
