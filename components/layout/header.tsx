@@ -1,5 +1,7 @@
 "use client"
-
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link"
 import Image from "next/image"
 import { useState } from "react"
@@ -8,6 +10,26 @@ import { Button } from "@/components/ui/button"
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [user, setUser] = useState<any>(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
+    };
+
+    getUser();
+  }, []);
+
+  const handleBooking = () => {
+    if (!user) {
+      setShowPopup(true);
+    } else {
+      router.push("/booking");
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-border">
@@ -16,7 +38,7 @@ export function Header() {
           <Link href="/" className="flex items-center gap-3">
            <Image
               src="/favicon.png"
-              alt="Studio 21 Logo"   // ✅ add this
+              alt="Studio 21 Logo"   
               width={50}
               height={50}
             />
@@ -36,9 +58,12 @@ export function Header() {
             <Link href="/#location" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
               Location
             </Link>
-            <Link href="/booking" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+            <button
+              onClick={handleBooking}
+              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+            >
               Book Now
-            </Link>
+            </button>
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
@@ -71,9 +96,12 @@ export function Header() {
               <Link href="/#location" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
                 Location
               </Link>
-              <Link href="/booking" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+              <button
+                onClick={handleBooking}
+                className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors text-left"
+              >
                 Book Now
-              </Link>
+              </button>
               <div className="flex gap-3 pt-4 border-t border-border">
                 <Button variant="ghost" asChild className="flex-1">
                   <Link href="/login">Log In</Link>
@@ -86,6 +114,37 @@ export function Header() {
           </div>
         )}
       </div>
+      {showPopup && (
+        <div className="fixed top-0 left-0 w-screen h-screen bg-black/50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-2xl p-6 w-[90%] max-w-sm text-center shadow-xl">
+            
+            <h2 className="text-lg font-semibold mb-2 text-[#1a1a1a]">
+              Login Required
+            </h2>
+
+            <p className="text-sm text-gray-500 mb-6">
+              You need to log in first before booking a session.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPopup(false)}
+                className="flex-1 py-2 rounded-lg border text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => router.push("/login")}
+                className="flex-1 py-2 rounded-lg bg-[#C8A96A] text-white hover:bg-[#B8995A]"
+              >
+                Go to Login
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </header>
   )
 }

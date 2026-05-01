@@ -1,26 +1,107 @@
 "use client"
-
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
 import Link from "next/link"
 import Image from "next/image"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false)
+  
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession();
+
+      if (data.session) {
+        router.replace("/user/profile");
+      }
+    };
+
+    checkSession();
+  }, []);
+  const [showModal, setShowModal] = useState(false);
+    const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Handle login logic here
-    console.log({ email, password, rememberMe })
-  }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    
+    if (!email || !password) {
+      setError("Please enter your email and password.");
+      return;
+    }
+
+    setLoading(true);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      // Clean error handling
+      if (error.message.toLowerCase().includes("invalid login credentials")) {
+        setError("Invalid email or password. Please try again.");
+      } else {
+        setError(error.message);
+      }
+      setLoading(false);
+      return;
+    }
+
+    // SUCCESS LOGIN
+const { data: userData } = await supabase.auth.getUser();
+
+const user = userData.user;
+
+console.log("STEP 1: AUTH USER →", user);
+
+if (!user) {
+  setError("No authenticated user found.");
+  setLoading(false);
+  return;
+}
+
+// 🔍 CHECK USERS TABLE
+const { data: profile, error: roleError } = await supabase
+  .from("users")
+  .select("*") // get everything para makita natin
+  .eq("id", user.id)
+  .maybeSingle(); // IMPORTANT: no crash if not found
+
+console.log("STEP 2: DB PROFILE →", profile);
+console.log("STEP 3: DB ERROR →", roleError);
+
+if (!profile) {
+  setError("User not found in users table.");
+  setLoading(false);
+  return;
+}
+
+console.log("STEP 4: ROLE →", profile.role);
+    setShowModal(true);
+
+    // redirect based on role
+    setTimeout(() => {
+      if (profile.role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/user/profile");
+      }
+    }, 1500);
+
+    setLoading(false);
+  };
 
   return (
     <div className="min-h-screen flex bg-white">
@@ -49,12 +130,17 @@ export default function LoginPage() {
             </CardHeader>
             <form onSubmit={handleSubmit}>
               <CardContent className="space-y-5 pt-6">
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg text-center">
+                    {error}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-[#1a1a1a]">Email</Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder="username@gmail.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -94,17 +180,16 @@ export default function LoginPage() {
                       Remember me
                     </Label>
                   </div>
-                  <Link 
-                    href="/forgot-password" 
-                    className="text-sm text-[#C8A96A] hover:text-[#B8995A] font-medium"
-                  >
-                    Forgot password?
-                  </Link>
+                  
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-6 pt-2">
-                <Button type="submit" className="w-full h-12 bg-[#C8A96A] hover:bg-[#B8995A] text-white font-medium text-base">
-                  Sign In
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-12 bg-[#C8A96A] hover:bg-[#B8995A] text-white font-medium text-base"
+                >
+                  {loading ? "Signing in..." : "Sign In"}
                 </Button>
                 <p className="text-sm text-muted-foreground text-center">
                   Don&apos;t have an account?{" "}
@@ -132,6 +217,21 @@ export default function LoginPage() {
           <p className="text-white/80">Professional photography services in our luxurious studio space.</p>
         </div>
       </div>
+      {showModal && (
+      <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+        <div className="bg-white rounded-2xl p-6 w-[320px] text-center shadow-lg">
+          
+          <h2 className="text-lg font-semibold mb-2">
+            Login Successful!
+          </h2>
+
+          <p className="text-gray-600 text-sm">
+            Redirecting to your dashboard...
+          </p>
+
+        </div>
+      </div>
+    )}
     </div>
   )
 }
