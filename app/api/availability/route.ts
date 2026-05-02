@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+function getBusinessHours(date: string) {
+  const d = new Date(date)
+  const day = d.getDay() // 0 = Sunday, 6 = Saturday
+
+  // Sunday
+  if (day === 0) {
+    return { start: 7, end: 23 }
+  }
+
+  // Monday–Saturday
+  return { start: 8, end: 23 }
+}
+
 export async function POST(req: Request) {
   const { date, duration } = await req.json()
 
-  const startHour = 9
-  const endHour = 18
+  const { start: startHour, end: endHour } = getBusinessHours(date)
 
   const slots: string[] = []
 
