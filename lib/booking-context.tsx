@@ -7,11 +7,20 @@ export type ServiceType = "photoshoot" | "makeup" | "studio-rental" | null
 export interface BookingData {
   service: ServiceType
   shootType: string
-  duration: string
+
+  duration: number
+
   addons: string[]
   date: Date | null
   time: string
   notes: string
+
+  // NEW (for photoshoot packages)
+  packageType?: string
+  sets?: number
+  price?: number
+  persons?: number
+  hmuaPersons?: number
 }
 
 interface BookingContextType {
@@ -26,11 +35,17 @@ interface BookingContextType {
 const defaultBookingData: BookingData = {
   service: null,
   shootType: "",
-  duration: "",
+  duration: 0,
   addons: [],
   date: null,
   time: "",
   notes: "",
+  // NEW
+  packageType: "",
+  sets: 0,
+  price: 0,
+  persons: 1,
+  hmuaPersons: 1
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined)
@@ -49,36 +64,34 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   }
 
   const getPrice = () => {
-    let price = 0
-    
-    // Base price by service
-    if (bookingData.service === "photoshoot") {
-      price = 150
-      if (bookingData.shootType === "portrait") price = 150
-      if (bookingData.shootType === "fashion") price = 250
-      if (bookingData.shootType === "product") price = 200
-      if (bookingData.shootType === "event") price = 350
-    } else if (bookingData.service === "makeup") {
-      price = 75
-      if (bookingData.shootType === "natural") price = 75
-      if (bookingData.shootType === "glamour") price = 100
-      if (bookingData.shootType === "bridal") price = 150
-    } else if (bookingData.service === "studio-rental") {
-      price = 100
+  // MAKEUP
+    if (bookingData.service === "makeup") {
+      const pricePerPerson = 1200
+      const persons = bookingData.persons || 0
+      return pricePerPerson * persons
     }
 
-    // Duration multiplier
-    if (bookingData.duration === "2hr") price *= 1.5
-    if (bookingData.duration === "half-day") price *= 2.5
-    if (bookingData.duration === "full-day") price *= 4
+    // PHOTOSHOOT
+    if (bookingData.service === "photoshoot") {
+      return bookingData.price || 0
+    }
 
-    // Add-ons
-    if (bookingData.addons.includes("extra-retouching")) price += 50
-    if (bookingData.addons.includes("rush-delivery")) price += 75
-    if (bookingData.addons.includes("prints")) price += 100
-    if (bookingData.addons.includes("digital-gallery")) price += 40
+    // STUDIO RENTAL
+    if (bookingData.service === "studio-rental") {
+      let price = bookingData.price || 0
 
-    return Math.round(price)
+      if (bookingData.addons.includes("photographer")) {
+        price += 1500
+      }
+
+      if (bookingData.addons.includes("hmua")) {
+        const persons = bookingData.hmuaPersons || 1
+        price += persons * 1200
+      }
+
+      return price
+    }
+    return 0
   }
 
   return (

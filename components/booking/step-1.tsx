@@ -10,24 +10,24 @@ const services = [
     id: "photoshoot" as ServiceType,
     icon: Camera,
     title: "Professional Photoshoot",
-    description: "High-quality photography with professional lighting and equipment. Perfect for portfolios, headshots, and creative projects.",
-    price: "From $150",
-    features: ["Professional lighting", "Multiple backdrops", "Edited photos included"],
+    description: "High-quality photography personalized to your vision. Choose from indoor or outdoor setups, with customizable themes and set designs to match your style—perfect for portraits, branding, and creative shoots.",
+    price: "From ₱ 8,500",
+    features: ["Photographer", "Hair and Make-up", "Professional lighting", "Multiple backdrops", "Edited photos included"],
   },
   {
     id: "makeup" as ServiceType,
     icon: Palette,
     title: "Makeup Services",
-    description: "Expert makeup artists to ensure you look your absolute best. Available as standalone service or add-on to any shoot.",
-    price: "From $75",
-    features: ["Professional products", "Consultation included", "Touch-up kit"],
+    description: "Enhance your look with professional makeup artistry designed for photoshoots or for your special occations. Whether natural or glam, our artists will match your desired style for the perfect finish.",
+    price: "From ₱ 1,200",
+    features: ["Hair Service", "Airbrush Make-up", "Free contact lens"],
   },
   {
     id: "studio-rental" as ServiceType,
     icon: Building,
     title: "Studio Rental",
     description: "Rent our fully-equipped studio space for your own projects. Includes lighting equipment and backdrop options.",
-    price: "From $100/hr",
+    price: "From ₱ 500/hr",
     features: ["Full equipment access", "Flexible hours", "Private space"],
   },
 ]
@@ -36,7 +36,7 @@ export function BookingStep1() {
   const { bookingData, updateBookingData, setStep } = useBooking()
 
   const handleServiceSelect = (serviceId: ServiceType) => {
-    updateBookingData({ service: serviceId, shootType: "", duration: "", addons: [] })
+    updateBookingData({ service: serviceId, shootType: "", duration: 0, addons: [] })
   }
 
   const handleNext = () => {
@@ -53,7 +53,7 @@ export function BookingStep1() {
           Choose Your Service
         </h1>
         <p className="text-muted-foreground">
-          Select the type of service you&apos;d like to book
+          Select the type of service you&apos;d like to avail
         </p>
       </div>
 
