@@ -1,5 +1,5 @@
 "use client"
-
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -153,25 +153,34 @@ const rentalPackages = [
 export function BookingStep2() {
   const { bookingData, updateBookingData, setStep, getPrice } = useBooking()
 
+  useEffect(() => {
+    if (bookingData.service === "makeup" && !bookingData.duration) {
+      updateBookingData({
+        duration: 1,
+        persons: 1
+      })
+    }
+  }, [bookingData.service])
+
   const currentShootTypes = bookingData.service ? shootTypes[bookingData.service] : []
 
   const handleAddonToggle = (addon: string) => {
-  let newAddons
+    let newAddons
 
-  if (bookingData.addons.includes(addon)) {
-    newAddons = bookingData.addons.filter((a) => a !== addon)
+    if (bookingData.addons.includes(addon)) {
+      newAddons = bookingData.addons.filter((a) => a !== addon)
 
-    // reset hmua persons when removed
-    if (addon === "hmua") {
-      updateBookingData({ addons: newAddons, hmuaPersons: 1 })
-      return
+      // reset hmua persons when removed
+      if (addon === "hmua") {
+        updateBookingData({ addons: newAddons, hmuaPersons: 1 })
+        return
+      }
+    } else {
+      newAddons = [...bookingData.addons, addon]
     }
-  } else {
-    newAddons = [...bookingData.addons, addon]
-  }
 
-  updateBookingData({ addons: newAddons })
-}
+    updateBookingData({ addons: newAddons })
+  }
 
   const handleNext = () => {
     if (bookingData.service === "photoshoot") {
@@ -185,7 +194,6 @@ export function BookingStep2() {
       }
     }
   }
-
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-10">
@@ -551,6 +559,8 @@ export function BookingStep2() {
               ? !bookingData.packageType || !bookingData.sets
               : bookingData.service === "studio-rental"
               ? !bookingData.price
+              : bookingData.service === "makeup"
+              ? !bookingData.shootType || !bookingData.persons
               : !bookingData.shootType
           }
           className="bg-[#C8A96A] hover:bg-[#B8995A] text-white px-8 h-12"

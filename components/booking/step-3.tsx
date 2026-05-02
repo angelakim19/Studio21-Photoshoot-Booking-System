@@ -1,6 +1,5 @@
 "use client"
-
-import { useState } from "react"
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,13 +31,6 @@ function generateCalendarDays(year: number, month: number) {
   return days
 }
 
-function isDateAvailable(date: Date): boolean {
-  const day = date.getDay()
-  if (day === 0) return false
-  const dayOfMonth = date.getDate()
-  if (dayOfMonth % 7 === 0) return false
-  return true
-}
 
 function isPastDate(date: Date): boolean {
   const today = new Date()
@@ -63,16 +55,27 @@ export function BookingStep3() {
   }
 
  const handleDateSelect = (day: number) => {
-    const selectedDate = new Date(year, month, day)
+  const selectedDate = new Date(year, month, day)
 
-    if (!isPastDate(selectedDate) && isDateAvailable(selectedDate)) {
-      updateBookingData({ date: selectedDate, time: "" })
-
-      // ADD THIS
-      fetchAvailability(selectedDate)
-      console.log("fetch triggered")
-    }
+  if (!isPastDate(selectedDate) && isDateAvailable(selectedDate)) {
+    updateBookingData({ date: selectedDate, time: "" })
   }
+}
+
+useEffect(() => {
+  if (!bookingData.date || !bookingData.duration) {
+    console.log("⛔ Waiting for date & duration...")
+    return
+  }
+
+  console.log("✅ Fetching with:", {
+    date: bookingData.date,
+    duration: bookingData.duration
+  })
+
+  fetchAvailability(bookingData.date)
+
+}, [bookingData.date, bookingData.duration])
 
   const handleTimeSelect = (raw: string) => {
     updateBookingData({ time: raw }) // ISO string
@@ -103,9 +106,9 @@ export function BookingStep3() {
     const duration = bookingData.duration
     console.log("duration:", duration)
 
-    // ✅ FIX HERE
+    // FIX HERE
     if (!duration || duration <= 0) {
-      console.warn("⚠️ Invalid duration:", duration)
+      console.warn("Invalid duration:", duration)
       setTimeSlots([])
       return
     }
@@ -126,7 +129,7 @@ export function BookingStep3() {
     const res = await fetch("/api/availability", {
       method: "POST",
       body: JSON.stringify({
-        date: localDate, // ✅ use this instead
+        date: localDate, // use this instead
         duration
       })
     })
@@ -135,14 +138,19 @@ export function BookingStep3() {
     console.log("🎯 API RESPONSE:", data.slots)
 
     const formatted = data.slots.map((slot: string) => {
-      const date = new Date(`1970-01-01T${slot}:00`)
+      const start = new Date(`1970-01-01T${slot}:00`)
 
-      return {
-        time: date.toLocaleTimeString([], {
+      const end = new Date(start.getTime() + bookingData.duration * 60 * 60 * 1000)
+
+      const formatTime = (d: Date) =>
+        d.toLocaleTimeString([], {
           hour: "numeric",
           minute: "2-digit",
           hour12: true
-        }),
+        })
+
+      return {
+        time: `${formatTime(start)} → ${formatTime(end)}`,
         raw: slot
       }
     })
@@ -155,6 +163,36 @@ export function BookingStep3() {
     setLoadingSlots(false)
   }
 }
+  const [blockedDates, setBlockedDates] = useState<string[]>([])
+  const [loadingBlocked, setLoadingBlocked] = useState(true)
+   const isDateAvailable = (date: Date): boolean => {
+      const localDate = new Date(
+        date.getTime() - date.getTimezoneOffset() * 60000
+      )
+        .toISOString()
+        .split("T")[0]
+
+      return !blockedDates.includes(localDate)
+    }
+
+  useEffect(() => {
+    const fetchBlockedDates = async () => {
+      try {
+        const res = await fetch("/api/availability/blocked-dates")
+        const data = await res.json()
+
+        console.log("🚫 BLOCKED DATES:", data)
+
+        setBlockedDates(data)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoadingBlocked(false)
+      }
+    }
+
+    fetchBlockedDates()
+  }, [])
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -230,7 +268,7 @@ export function BookingStep3() {
                 <span className="text-muted-foreground">Selected</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-200" />
+                <div className="w-3 h-3 rounded-full bg-black" />
                 <span className="text-muted-foreground">Available</span>
               </div>
               <div className="flex items-center gap-2">

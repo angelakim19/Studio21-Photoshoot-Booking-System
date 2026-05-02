@@ -12,12 +12,26 @@ export function BookingStep4() {
   const [isConfirmed, setIsConfirmed] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  
   const handleConfirm = async () => {
+    if (!paymentMethod || !referenceNumber) {
+      alert("Please complete payment details")
+      return
+    }
+
+    if (paymentMethod === "Other" && !otherPaymentMethod) {
+      alert("Please specify your payment method")
+      return
+    }
     setIsSubmitting(true)
     await new Promise((resolve) => setTimeout(resolve, 1500))
     setIsSubmitting(false)
     setIsConfirmed(true)
   }
+  
+  const [paymentMethod, setPaymentMethod] = useState("")
+  const [referenceNumber, setReferenceNumber] = useState("")
+  const [otherPaymentMethod, setOtherPaymentMethod] = useState("")
 
   if (isConfirmed) {
     return (
@@ -162,12 +176,76 @@ export function BookingStep4() {
             </div>
           )}
 
-          <div className="border-t border-gray-100 pt-6">
+          <div className="border-t border-gray-100 pt-6 space-y-5">
+
+            {/* 🔔 DOWNPAYMENT NOTICE */}
+            <div className="bg-[#F5F5F5] rounded-xl p-4">
+              <p className="text-sm text-[#1a1a1a]">
+                A <span className="font-semibold text-[#C8A96A]">50% downpayment</span> is required to secure your booking. 
+                The remaining balance will be paid at the studio on your appointment day.
+              </p>
+            </div>
+
+            {/* 💳 PAYMENT INPUTS */}
+            <div className="grid md:grid-cols-2 gap-3">
+
+              {/* Payment Method */}
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Payment Method
+                </label>
+                <select
+                  className="w-full mt-1 p-3 rounded-xl border border-gray-200"
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                >
+                  <option value="">Select method</option>
+                  <option value="GCash">GCash</option>
+                  <option value="Maya">Maya</option>
+                  <option value="BPI">BPI</option>
+                  <option value="BDO">BDO</option>
+                  <option value="UnionBank">UnionBank</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              {paymentMethod === "Other" && (
+                <input
+                  type="text"
+                  placeholder="Enter payment method"
+                  className="w-full mt-7 p-2 rounded-xl border border-gray-200"
+                  value={otherPaymentMethod}
+                  onChange={(e) => setOtherPaymentMethod(e.target.value)}
+                />
+              )}
+
+              {/* Reference Number */}
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Reference Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter reference number"
+                  className="w-full mt-1 p-3 rounded-xl border border-gray-200"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                />
+              </div>
+
+            </div>
+
+            {/* 💰 TOTAL */}
             <div className="flex justify-between items-center">
               <span className="text-lg font-semibold text-[#1a1a1a]">Total</span>
-              <span className="text-3xl font-bold text-[#C8A96A]">${getPrice()}</span>
+              <span className="text-3xl font-bold text-[#C8A96A]">
+                ₱{getPrice()}
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Payment will be collected at the studio</p>
+
+            <p className="text-xs text-muted-foreground mt-1">
+              Downpayment: ₱{getPrice() * 0.5}
+            </p>
+
           </div>
         </CardContent>
       </Card>
