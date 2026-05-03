@@ -80,6 +80,14 @@ export default function SignupPage() {
   const { data, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`.trim(),
+        phone,
+      },
+    },
   });
 
   if (signUpError) {
@@ -100,11 +108,24 @@ export default function SignupPage() {
       role: "client",
     });
 
+    const { error: metadataError } = await supabase.auth.updateUser({
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`.trim(),
+        phone,
+      },
+    })
+
     if (insertError) {
       console.error(insertError);
       setError("Account created but failed to save profile");
       setLoading(false);
       return;
+    }
+
+    if (metadataError) {
+      console.error(metadataError);
     }
   }
 

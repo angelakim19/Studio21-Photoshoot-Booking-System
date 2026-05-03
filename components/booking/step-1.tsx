@@ -1,36 +1,10 @@
 "use client"
 
-import { Camera, Palette, Building, ArrowRight, Check } from "lucide-react"
+import { ArrowRight, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useBooking, ServiceType } from "@/lib/booking-context"
-
-const services = [
-  {
-    id: "photoshoot" as ServiceType,
-    icon: Camera,
-    title: "Professional Photoshoot",
-    description: "High-quality photography with professional lighting and equipment. Perfect for portfolios, headshots, and creative projects.",
-    price: "From $150",
-    features: ["Professional lighting", "Multiple backdrops", "Edited photos included"],
-  },
-  {
-    id: "makeup" as ServiceType,
-    icon: Palette,
-    title: "Makeup Services",
-    description: "Expert makeup artists to ensure you look your absolute best. Available as standalone service or add-on to any shoot.",
-    price: "From $75",
-    features: ["Professional products", "Consultation included", "Touch-up kit"],
-  },
-  {
-    id: "studio-rental" as ServiceType,
-    icon: Building,
-    title: "Studio Rental",
-    description: "Rent our fully-equipped studio space for your own projects. Includes lighting equipment and backdrop options.",
-    price: "From $100/hr",
-    features: ["Full equipment access", "Flexible hours", "Private space"],
-  },
-]
+import { bookingServices } from "@/lib/booking-services"
 
 export function BookingStep1() {
   const { bookingData, updateBookingData, setStep } = useBooking()
@@ -58,7 +32,7 @@ export function BookingStep1() {
       </div>
 
       <div className="grid gap-5">
-        {services.map((service) => (
+        {bookingServices.map((service) => (
           <Card 
             key={service.id}
             className={`
