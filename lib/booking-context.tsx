@@ -6,21 +6,33 @@ export type ServiceType = "photoshoot" | "makeup" | "studio-rental" | null
 
 export interface BookingData {
   service: ServiceType
-  shootType: string
+  serviceType?: ServiceType
+  shootType?: string
 
   duration: number
-
   addons: string[]
+  selectedAddonIds?: string[] // ⭐ ADD
+
   date: Date | null
   time: string
   notes: string
 
-  // NEW (for photoshoot packages)
   packageType?: string
+  packageId?: number
+  packageVariationId?: number
+  rentalOptionId?: number
+  makeupServiceId?: number
+
   sets?: number
   price?: number
   persons?: number
   hmuaPersons?: number
+
+  total_price?: number
+
+  package_name_snapshot?: string
+  package_price_snapshot?: number
+  inclusions_snapshot?: string
 }
 
 interface BookingContextType {

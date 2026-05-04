@@ -116,7 +116,7 @@ const rentalPackages = [
     duration: 1,
     options: [
       { type: "basic", label: "Basic Setup", price: 500 },
-      { type: "backdrop", label: "With Backdrop", price: 700 }
+      { type: "full", label: "With Backdrop", price: 700 }
     ]
   },
   {
@@ -124,7 +124,7 @@ const rentalPackages = [
     duration: 2,
     options: [
       { type: "basic", label: "Basic Setup", price: 1000 },
-      { type: "backdrop", label: "With Backdrop", price: 1400 }
+      { type: "full", label: "With Backdrop", price: 1400 }
     ]
   },
   {
@@ -132,24 +132,36 @@ const rentalPackages = [
     duration: 3,
     options: [
       { type: "basic", label: "Basic Setup", price: 1500 },
-      { type: "backdrop", label: "With Backdrop", price: 2100 }
+      { type: "full", label: "With Backdrop", price: 2100 }
     ]
   },
   {
     label: "Half Day (4 hrs)",
      duration: 4,
     options: [
-      { type: "backdrop", label: "With Backdrop", price: 2500 }
+      { type: "full", label: "With Backdrop", price: 2500 }
     ]
   },
   {
     label: "Full Day (8 hrs)",
     duration: 8,
     options: [
-      { type: "backdrop", label: "With Backdrop", price: 5000 }
+      { type: "full", label: "With Backdrop", price: 5000 }
     ]
   }
 ]
+
+const packageIdMap: Record<string, number> = {
+  "Indoor-Set-Sesign": 1,
+  "Plain-Background": 2,
+  "Outdoor": 3
+}
+
+const rentalOptionMap: Record<string, number> = {
+  basic: 1,
+  backdrop: 2
+}
+
 export function BookingStep2() {
   const { bookingData, updateBookingData, setStep, getPrice } = useBooking()
 
@@ -179,16 +191,22 @@ export function BookingStep2() {
       newAddons = [...bookingData.addons, addon]
     }
 
-    updateBookingData({ addons: newAddons })
+    updateBookingData({ 
+      addons: newAddons,
+      selectedAddonIds: newAddons // ⭐ ADD
+    })
   }
 
-  const handleNext = () => {
+const handleNext = () => {
+    updateBookingData({
+      serviceType: bookingData.service // ✅ NEW (safe)
+    })
+
     if (bookingData.service === "photoshoot") {
       if (bookingData.packageType && bookingData.sets) {
         setStep(3)
       }
     } else {
-      // keep old logic for makeup & rental (for now)
       if (bookingData.shootType) {
         setStep(3)
       }
@@ -248,7 +266,8 @@ export function BookingStep2() {
 
                         updateBookingData({
                           persons,
-                          duration: persons 
+                          duration: persons,
+                          makeupServiceId: 1 // ⭐ since isa lang
                         })
                       }}
                     >
@@ -331,10 +350,22 @@ export function BookingStep2() {
                             onClick={() =>
                               updateBookingData({
                                 packageType: pkg.type,
+
+                                // ✅ FIXED
+                                packageId: packageIdMap[pkg.type],
+                                packageVariationId: opt.sets,
+
                                 sets: opt.sets,
                                 price: opt.price,
+                                total_price: opt.price, // ✅ IMPORTANT
+
                                 duration: opt.sets * 2,
-                                addons: []
+                                addons: [],
+
+                                // ✅ SNAPSHOTS
+                                package_name_snapshot: pkg.label,
+                                package_price_snapshot: opt.price,
+                                inclusions_snapshot: pkg.inclusions.join(", ")
                               })
                             }
                             className={`
@@ -389,6 +420,8 @@ export function BookingStep2() {
                                 updateBookingData({
                                   duration: pkg.duration,
                                   shootType: opt.type,
+                                  // ✅ FIXED
+                                   rentalOptionId: rentalOptionMap[opt.type],
                                   price: opt.price,
                                   addons: []
                                 })
