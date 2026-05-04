@@ -20,7 +20,7 @@ export default function LoginPage() {
       const { data } = await supabase.auth.getSession();
 
       if (data.session) {
-        router.replace("/user/profile");
+        router.replace("/user");
       }
     };
 
@@ -96,7 +96,7 @@ console.log("STEP 4: ROLE →", profile.role);
       if (profile.role === "admin") {
         router.push("/admin");
       } else {
-        router.push("/user/profile");
+        router.push("/user");
       }
     }, 1500);
 

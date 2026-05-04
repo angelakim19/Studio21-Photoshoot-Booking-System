@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
-import { Calendar, Users, BarChart3, Settings, LogOut } from "lucide-react"
+import { Calendar, Users, BarChart3, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -17,6 +17,7 @@ export default function AdminLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
 
   const menu = [
     { name: "Calendar", href: "/admin", icon: Calendar },
@@ -29,16 +30,31 @@ export default function AdminLayout({
     <div className="flex min-h-screen">
 
       {/* SIDEBAR */}
-      <aside className="w-[300px] bg-[#111111] text-white p-6 flex flex-col justify-between">
+      <aside
+        className={`relative bg-[#111111] text-white p-4 md:p-6 flex flex-col justify-between transition-all duration-300 ${
+          collapsed ? "w-[88px]" : "w-[300px]"
+        }`}
+      >
+
+        <button
+          onClick={() => setCollapsed((prev) => !prev)}
+          className="absolute -right-3 top-8 z-10 h-8 w-8 rounded-md bg-[#1f1f1f] text-gray-200 border border-[#2a2a2a] flex items-center justify-center hover:text-white"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
 
         <div>
           {/* LOGO */}
-          <div className="flex items-center gap-3 mb-8">
+          <div className={`mb-8 flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
             <Image src="/favicon.png" alt="logo" width={40} height={40} />
-            <div>
-              <h2 className="font-serif text-xl">Studio 21</h2>
-              <p className="text-sm text-[#C8A96A]">Admin Dashboard</p>
-            </div>
+            {!collapsed && (
+              <div>
+                <h2 className="font-serif text-xl">Studio 21</h2>
+                <p className="text-sm text-[#C8A96A]">Admin Dashboard</p>
+              </div>
+            )}
           </div>
 
           <hr className="border-gray-800 mb-6" />
@@ -52,15 +68,16 @@ export default function AdminLayout({
               return (
                 <Link key={item.name} href={item.href}>
                   <div
+                    title={collapsed ? item.name : undefined}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition cursor-pointer
                     ${
                       isActive
                         ? "bg-[#C8A96A] text-white"
                         : "text-gray-300 hover:bg-gray-800"
-                    }`}
+                    } ${collapsed ? "justify-center px-2" : ""}`}
                   >
                     <Icon size={18} />
-                    {item.name}
+                    {!collapsed && item.name}
                   </div>
                 </Link>
               )
@@ -69,23 +86,26 @@ export default function AdminLayout({
         </div>
 
         {/* USER FOOTER */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-3`}>
+          <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
             <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center">
               <span>A</span>
             </div>
-            <div>
-              <p className="text-sm">Admin</p>
-              <p className="text-xs text-gray-400">Studio 21</p>
-            </div>
+            {!collapsed && (
+              <div>
+                <p className="text-sm">Admin</p>
+                <p className="text-xs text-gray-400">Studio 21</p>
+              </div>
+            )}
           </div>
 
           <button
             onClick={() => setLogoutOpen(true)}
+            title={collapsed ? "Log out" : undefined}
             className="flex items-center gap-2 text-gray-300 hover:text-white transition"
           >
             <LogOut size={16} />
-            <span className="text-sm">Log out</span>
+            {!collapsed && <span className="text-sm">Log out</span>}
           </button>
         </div>
 
