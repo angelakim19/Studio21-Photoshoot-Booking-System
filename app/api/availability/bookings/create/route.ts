@@ -24,7 +24,7 @@ export async function POST(req: Request) {
       reference_number,
     } = body
 
-    // ✅ REQUIRED VALIDATION
+    // REQUIRED VALIDATION
     if (!service_id || !date || !time || !duration) {
       return NextResponse.json(
         { error: "Missing required fields" },
@@ -47,12 +47,21 @@ export async function POST(req: Request) {
       )
     }
 
-    const start_datetime = new Date(`${date}T${time}:00`)
-    const end_datetime = new Date(
-      start_datetime.getTime() + duration * 60 * 60 * 1000
-    )
 
-    // ✅ READ TOKEN
+    function addHours(time: string, duration: number) {
+      const [hour, minute] = time.split(":").map(Number)
+      const newHour = hour + duration
+
+      return `${String(newHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+    }
+    const start_datetime = `${date} ${time}:00`
+    const end_datetime = `${date} ${addHours(time, duration)}:00`
+    //const start_datetime = new Date(`${date}T${time}:00`)
+    //const end_datetime = new Date(
+    //  start_datetime.getTime() + duration * 60 * 60 * 1000
+    //)
+
+    // READ TOKEN
     const authHeader = req.headers.get("authorization")
 
     if (!authHeader) {
@@ -61,7 +70,7 @@ export async function POST(req: Request) {
 
     const token = authHeader.replace("Bearer ", "")
 
-    // ✅ SUPABASE CLIENT
+    // SUPABASE CLIENT
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -74,7 +83,7 @@ export async function POST(req: Request) {
       }
     )
 
-    // ✅ GET USER
+    // GET USER
     const {
       data: { user },
       error: authError,
@@ -84,7 +93,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // ✅ BUILD BOOKING DATA
+    // BUILD BOOKING DATA
     const bookingData: any = {
       user_id: user.id,
       service_id,
@@ -101,7 +110,7 @@ export async function POST(req: Request) {
       inclusions_snapshot,
     }
 
-    // ✅ SERVICE-BASED ASSIGNMENT
+    // SERVICE-BASED ASSIGNMENT
     if (service_id === 1) {
       bookingData.package_id = package_id
       bookingData.package_variation_id = package_variation_id
@@ -111,7 +120,7 @@ export async function POST(req: Request) {
       bookingData.studio_rental_option_id = studio_rental_option_id
     }
 
-    // ✅ INSERT BOOKING
+    // INSERT BOOKING
     const { data, error } = await supabase
       .from("bookings")
       .insert([bookingData])
@@ -123,7 +132,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // ✅ INSERT PAYMENT (linked to booking)
+    // INSERT PAYMENT (linked to booking)
     const { error: paymentError } = await supabase
       .from("payments")
       .insert([
@@ -141,7 +150,7 @@ export async function POST(req: Request) {
       // optional: you can fail here if needed
     }
 
-    // ✅ SUCCESS RESPONSE
+    // SUCCESS RESPONSE
     return NextResponse.json({ success: true, data })
 
   } catch (err) {

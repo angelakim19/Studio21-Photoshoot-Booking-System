@@ -31,29 +31,32 @@ export async function POST(req: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const startOfDay = new Date(date + "T00:00:00").toISOString()
-  const endOfDay = new Date(date + "T23:59:59").toISOString()
-
   const { data: bookings } = await supabase
     .from("bookings")
     .select("start_datetime, end_datetime, status")
     .eq("status", "approved")
-    //.or(`and(start_datetime.lte.${endOfDay},end_datetime.gte.${startOfDay})`)
 
     console.log("📦 BOOKINGS:", bookings)
-  const bookingsList = (bookings || []).filter((booking) => {
+    const bookingsList = (bookings || []).filter((booking) => {
       return booking.start_datetime.startsWith(date)
     })
 
   console.log("📅 FILTERED BOOKINGS:", bookingsList)
-
+  function timeToMinutes(time: string) {
+    const [hour, minute] = time.split(":").map(Number)
+    return hour * 60 + minute
+  }
   const availableSlots = slots.filter((slot) => {
-    const slotStart = new Date(`${date}T${slot}:00`)
-    const slotEnd = new Date(slotStart.getTime() + duration * 60 * 60 * 1000)
+    const slotStart = timeToMinutes(slot)
+    const slotEnd = slotStart + duration * 60
 
     return !bookingsList.some((booking) => {
-      const bookingStart = new Date(booking.start_datetime + "+08:00")
-const bookingEnd = new Date(booking.end_datetime + "+08:00")
+      const bookingStartTime = booking.start_datetime.split(" ")[1]
+      const bookingEndTime = booking.end_datetime.split(" ")[1]
+
+      const bookingStart = timeToMinutes(bookingStartTime)
+      const bookingEnd = timeToMinutes(bookingEndTime)
+
       return slotStart < bookingEnd && slotEnd > bookingStart
     })
   })
