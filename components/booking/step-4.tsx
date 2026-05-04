@@ -16,6 +16,8 @@ export function BookingStep4() {
   const { bookingData, setStep, getPrice, resetBooking } = useBooking()
   const [isConfirmed, setIsConfirmed] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showError, setShowError] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
   
   const serviceMap: Record<string, number> = {
     photoshoot: 1,
@@ -25,7 +27,14 @@ export function BookingStep4() {
 
   const handleConfirm = async () => {
     if (!paymentMethod || !referenceNumber) {
-      alert("Please complete payment details")
+      setErrorMessage("Please complete payment details")
+      setShowError(true)
+      return
+    }
+
+    if (!/^\d{12}$/.test(referenceNumber)) {
+      setErrorMessage("Reference number must be exactly 12 digits")
+      setShowError(true)
       return
     }
 
@@ -162,7 +171,22 @@ export function BookingStep4() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Time</p>
-                    <p className="font-medium text-[#1a1a1a]">{bookingData.time}</p>
+                    <p className="font-medium text-[#1a1a1a]">
+                      {new Date(`1970-01-01T${bookingData.time}`).toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                      })}
+                      {" - "}
+                      {new Date(
+                        new Date(`1970-01-01T${bookingData.time}`).getTime() +
+                        bookingData.duration * 60 * 60 * 1000
+                      ).toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        hour12: true,
+                      })}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -242,7 +266,22 @@ export function BookingStep4() {
               <h3 className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Time</h3>
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-[#C8A96A]" />
-                <p className="font-semibold text-[#1a1a1a]">{bookingData.time}</p>
+                <p className="font-semibold text-[#1a1a1a]">
+                  {new Date(`1970-01-01T${bookingData.time}`).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                  {" - "}
+                  {new Date(
+                    new Date(`1970-01-01T${bookingData.time}`).getTime() +
+                    bookingData.duration * 60 * 60 * 1000
+                  ).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                </p>
               </div>
             </div>
           </div>
@@ -317,6 +356,8 @@ export function BookingStep4() {
                 </label>
                 <input
                   type="text"
+                  inputMode="numeric"   
+                  maxLength={12}        
                   placeholder="Enter reference number"
                   className="w-full mt-1 p-3 rounded-xl border border-gray-200"
                   value={referenceNumber}
@@ -367,6 +408,22 @@ export function BookingStep4() {
           {isSubmitting ? "Confirming..." : "Confirm Booking"}
         </Button>
       </div>
+
+      {showError && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
+          <div className="bg-white rounded-xl p-6 w-[300px] text-center shadow-lg">
+            <h2 className="text-lg font-semibold mb-2">Error</h2>
+            <p className="text-sm text-gray-600 mb-4">{errorMessage}</p>
+
+            <button
+              onClick={() => setShowError(false)}
+              className="px-4 py-2 bg-[#C8A96A] text-white rounded-lg"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
