@@ -1,24 +1,10 @@
 "use client"
-
-import { useState } from "react"
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useBooking } from "@/lib/booking-context"
 
-const timeSlots = [
-  { time: "9:00 AM", available: true },
-  { time: "10:00 AM", available: true },
-  { time: "11:00 AM", available: false },
-  { time: "12:00 PM", available: true },
-  { time: "1:00 PM", available: true },
-  { time: "2:00 PM", available: false },
-  { time: "3:00 PM", available: true },
-  { time: "4:00 PM", available: true },
-  { time: "5:00 PM", available: true },
-  { time: "6:00 PM", available: false },
-  { time: "7:00 PM", available: true },
-]
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const months = [
@@ -45,13 +31,6 @@ function generateCalendarDays(year: number, month: number) {
   return days
 }
 
-function isDateAvailable(date: Date): boolean {
-  const day = date.getDay()
-  if (day === 0) return false
-  const dayOfMonth = date.getDate()
-  if (dayOfMonth % 7 === 0) return false
-  return true
-}
 
 function isPastDate(date: Date): boolean {
   const today = new Date()
@@ -75,15 +54,31 @@ export function BookingStep3() {
     setCurrentDate(new Date(year, month + 1, 1))
   }
 
-  const handleDateSelect = (day: number) => {
-    const selectedDate = new Date(year, month, day)
-    if (!isPastDate(selectedDate) && isDateAvailable(selectedDate)) {
-      updateBookingData({ date: selectedDate, time: "" })
-    }
+ const handleDateSelect = (day: number) => {
+  const selectedDate = new Date(year, month, day)
+
+  if (!isPastDate(selectedDate) && isDateAvailable(selectedDate)) {
+    updateBookingData({ date: selectedDate, time: "" })
+  }
+}
+
+useEffect(() => {
+  if (!bookingData.date || !bookingData.duration) {
+    console.log("⛔ Waiting for date & duration...")
+    return
   }
 
-  const handleTimeSelect = (time: string) => {
-    updateBookingData({ time })
+  console.log("✅ Fetching with:", {
+    date: bookingData.date,
+    duration: bookingData.duration
+  })
+
+  fetchAvailability(bookingData.date)
+
+}, [bookingData.date, bookingData.duration])
+
+  const handleTimeSelect = (raw: string) => {
+    updateBookingData({ time: raw }) // ISO string
   }
 
   const handleNext = () => {
@@ -100,6 +95,104 @@ export function BookingStep3() {
       bookingData.date.getFullYear() === year
     )
   }
+
+  const [timeSlots, setTimeSlots] = useState<any[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+
+ const fetchAvailability = async (selectedDate: Date) => {
+  try {
+    setLoadingSlots(true)
+
+    const duration = bookingData.duration
+    console.log("duration:", duration)
+
+    // FIX HERE
+    if (!duration || duration <= 0) {
+      console.warn("Invalid duration:", duration)
+      setTimeSlots([])
+      return
+    }
+
+    console.log("🚀 SENDING TO API:", {
+      date: selectedDate,
+      duration
+    })
+
+    
+    // FIX TIMEZONE HERE
+    const localDate = new Date(
+      selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000
+    )
+      .toISOString()
+      .split("T")[0]
+
+    const res = await fetch("/api/availability", {
+      method: "POST",
+      body: JSON.stringify({
+        date: localDate, // use this instead
+        duration
+      })
+    })
+
+    const data = await res.json()
+    console.log("🎯 API RESPONSE:", data.slots)
+
+    const formatted = data.slots.map((slot: string) => {
+      const start = new Date(`1970-01-01T${slot}:00`)
+
+      const end = new Date(start.getTime() + bookingData.duration * 60 * 60 * 1000)
+
+      const formatTime = (d: Date) =>
+        d.toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true
+        })
+
+      return {
+        time: `${formatTime(start)} → ${formatTime(end)}`,
+        raw: slot
+      }
+    })
+
+    setTimeSlots(formatted)
+
+  } catch (err) {
+    console.error(err)
+  } finally {
+    setLoadingSlots(false)
+  }
+}
+  const [blockedDates, setBlockedDates] = useState<string[]>([])
+  const [loadingBlocked, setLoadingBlocked] = useState(true)
+   const isDateAvailable = (date: Date): boolean => {
+      const localDate = new Date(
+        date.getTime() - date.getTimezoneOffset() * 60000
+      )
+        .toISOString()
+        .split("T")[0]
+
+      return !blockedDates.includes(localDate)
+    }
+
+  useEffect(() => {
+    const fetchBlockedDates = async () => {
+      try {
+        const res = await fetch("/api/availability/blocked-dates")
+        const data = await res.json()
+
+        console.log("🚫 BLOCKED DATES:", data)
+
+        setBlockedDates(data)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoadingBlocked(false)
+      }
+    }
+
+    fetchBlockedDates()
+  }, [])
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -175,7 +268,7 @@ export function BookingStep3() {
                 <span className="text-muted-foreground">Selected</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-200" />
+                <div className="w-3 h-3 rounded-full bg-black" />
                 <span className="text-muted-foreground">Available</span>
               </div>
               <div className="flex items-center gap-2">
@@ -191,7 +284,7 @@ export function BookingStep3() {
           <CardHeader>
             <CardTitle className="text-lg text-[#1a1a1a]">
               {bookingData.date 
-                ? `Available Times`
+                ? `Available Start Times`
                 : "Select a Date First"
               }
             </CardTitle>
@@ -208,25 +301,27 @@ export function BookingStep3() {
           <CardContent>
             {bookingData.date ? (
               <div className="grid grid-cols-2 gap-3">
-                {timeSlots.map((slot) => (
-                  <button
-                    key={slot.time}
-                    onClick={() => slot.available && handleTimeSelect(slot.time)}
-                    disabled={!slot.available}
-                    className={`
-                      py-3 px-4 rounded-xl text-sm font-medium transition-all border-2
-                      ${bookingData.time === slot.time
-                        ? "bg-[#C8A96A] text-white border-[#C8A96A] shadow-md"
-                        : slot.available
-                          ? "bg-white hover:bg-[#C8A96A]/5 border-gray-100 hover:border-[#C8A96A] text-[#1a1a1a]"
-                          : "bg-gray-50 text-gray-300 cursor-not-allowed border-transparent"
-                      }
-                    `}
-                  >
-                    {slot.time}
-                    {!slot.available && <span className="block text-xs">Booked</span>}
-                  </button>
-                ))}
+                {loadingSlots ? (
+                    <p className="text-sm text-muted-foreground">Loading available times...</p>
+                  ) : timeSlots.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No available slots</p>
+                  ) : (
+                    timeSlots.map((slot) => (
+                      <button
+                        key={slot.raw}
+                        onClick={() => handleTimeSelect(slot.raw)}
+                        className={`
+                          py-3 px-4 rounded-xl text-sm font-medium transition-all border-2
+                          ${bookingData.time === slot.raw
+                            ? "bg-[#C8A96A] text-white border-[#C8A96A] shadow-md"
+                            : "bg-white hover:bg-[#C8A96A]/5 border-gray-100 hover:border-[#C8A96A] text-[#1a1a1a]"
+                          }
+                        `}
+                      >
+                        {slot.time}
+                      </button>
+                    ))
+                  )}
               </div>
             ) : (
               <div className="text-center py-16 text-muted-foreground">

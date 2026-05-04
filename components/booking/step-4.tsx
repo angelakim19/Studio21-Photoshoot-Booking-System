@@ -6,18 +6,121 @@ import { ArrowLeft, CheckCircle, Calendar, Clock, Camera, AlertCircle, Sparkles 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useBooking } from "@/lib/booking-context"
+import { createClient } from "@supabase/supabase-js"
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 export function BookingStep4() {
   const { bookingData, setStep, getPrice, resetBooking } = useBooking()
   const [isConfirmed, setIsConfirmed] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  const serviceMap: Record<string, number> = {
+    photoshoot: 1,
+    makeup: 2,
+    "studio-rental": 3
+  }
 
   const handleConfirm = async () => {
-    setIsSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsSubmitting(false)
-    setIsConfirmed(true)
+    if (!paymentMethod || !referenceNumber) {
+      alert("Please complete payment details")
+      return
+    }
+
+    if (paymentMethod === "Other" && !otherPaymentMethod) {
+      alert("Please specify your payment method")
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+
+      // ✅ ADD THIS BLOCK HERE
+      const {
+        data: { session }
+      } = await supabase.auth.getSession()
+
+      const access_token = session?.access_token
+
+      console.log("SESSION:", session)
+
+      if (!access_token) {
+        alert("You must be logged in")
+        setIsSubmitting(false)
+        return
+      }
+
+      const localDate = new Date(
+        bookingData.date!.getTime() -
+        bookingData.date!.getTimezoneOffset() * 60000
+      )
+        .toISOString()
+        .split("T")[0]
+      
+      const res = await fetch("/api/availability/bookings/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${access_token}` // ✅ IMPORTANT
+        },
+        body: JSON.stringify({
+        date: localDate,
+        time: bookingData.time,
+        duration: bookingData.duration,
+
+        // ✅ REQUIRED
+        service_id: serviceMap[bookingData.service!],
+
+        // ✅ depends on service
+        package_id: bookingData.packageId || null,
+        package_variation_id: bookingData.packageVariationId || null,
+        studio_rental_option_id: bookingData.rentalOptionId || null,
+        makeup_service_id: bookingData.makeupServiceId || null,
+
+        // ✅ makeup only
+        number_of_persons: bookingData.persons || null,
+
+        // ✅ price
+        total_price: getPrice(),
+
+        // ✅ snapshots
+        package_name_snapshot: bookingData.package_name_snapshot,
+        package_price_snapshot: bookingData.package_price_snapshot,
+        inclusions_snapshot: bookingData.inclusions_snapshot,
+
+        // ✅ notes
+        notes: bookingData.notes,
+
+        // ✅ payment
+        payment_method:
+          paymentMethod === "Other" ? otherPaymentMethod : paymentMethod,
+        reference_number: referenceNumber
+      })
+            })
+      
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || "Failed to book")
+        setIsSubmitting(false)
+        return
+      }
+
+      setIsSubmitting(false)
+      setIsConfirmed(true)
+
+    } catch (err) {
+      console.error(err)
+      alert("Something went wrong")
+      setIsSubmitting(false)
+    }
   }
+    
+  const [paymentMethod, setPaymentMethod] = useState("")
+  const [referenceNumber, setReferenceNumber] = useState("")
+  const [otherPaymentMethod, setOtherPaymentMethod] = useState("")
 
   if (isConfirmed) {
     return (
@@ -29,8 +132,11 @@ export function BookingStep4() {
             </div>
             <h1 className="font-serif text-3xl font-semibold mb-3 text-[#1a1a1a]">Booking Confirmed!</h1>
             <p className="text-muted-foreground mb-8">
-              Your session has been successfully booked. We&apos;ve sent a confirmation email with all the details.
+              Your session has been successfully booked. Please check your Dashboard for the confirmation.
+
+              Thank you for choosing Studio 21!
             </p>
+    
             
             <div className="bg-[#F5F5F5] rounded-2xl p-6 mb-8 text-left">
               <div className="space-y-4">
@@ -117,7 +223,7 @@ export function BookingStep4() {
             </div>
             <div className="bg-[#F5F5F5] rounded-xl p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Duration</h3>
-              <p className="font-semibold capitalize text-[#1a1a1a]">{bookingData.duration}</p>
+              <p className="font-semibold -[#1a1a1a]">{bookingData.duration} hr/hrs</p>
             </div>
             <div className="bg-[#F5F5F5] rounded-xl p-4">
               <h3 className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Date</h3>
@@ -162,12 +268,76 @@ export function BookingStep4() {
             </div>
           )}
 
-          <div className="border-t border-gray-100 pt-6">
+          <div className="border-t border-gray-100 pt-6 space-y-5">
+
+            {/* 🔔 DOWNPAYMENT NOTICE */}
+            <div className="bg-[#F5F5F5] rounded-xl p-4">
+              <p className="text-sm text-[#1a1a1a]">
+                A <span className="font-semibold text-[#C8A96A]">50% downpayment</span> is required to secure your booking. 
+                The remaining balance will be paid at the studio on your appointment day.
+              </p>
+            </div>
+
+            {/* 💳 PAYMENT INPUTS */}
+            <div className="grid md:grid-cols-2 gap-3">
+
+              {/* Payment Method */}
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Payment Method
+                </label>
+                <select
+                  className="w-full mt-1 p-3 rounded-xl border border-gray-200"
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                >
+                  <option value="">Select method</option>
+                  <option value="GCash">GCash</option>
+                  <option value="Maya">Maya</option>
+                  <option value="BPI">BPI</option>
+                  <option value="BDO">BDO</option>
+                  <option value="UnionBank">UnionBank</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              {paymentMethod === "Other" && (
+                <input
+                  type="text"
+                  placeholder="Enter payment method"
+                  className="w-full mt-7 p-2 rounded-xl border border-gray-200"
+                  value={otherPaymentMethod}
+                  onChange={(e) => setOtherPaymentMethod(e.target.value)}
+                />
+              )}
+
+              {/* Reference Number */}
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Reference Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter reference number"
+                  className="w-full mt-1 p-3 rounded-xl border border-gray-200"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                />
+              </div>
+
+            </div>
+
+            {/* 💰 TOTAL */}
             <div className="flex justify-between items-center">
               <span className="text-lg font-semibold text-[#1a1a1a]">Total</span>
-              <span className="text-3xl font-bold text-[#C8A96A]">${getPrice()}</span>
+              <span className="text-3xl font-bold text-[#C8A96A]">
+                ₱{getPrice()}
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Payment will be collected at the studio</p>
+
+            <p className="text-xs text-muted-foreground mt-1">
+              Downpayment: ₱{getPrice() * 0.5}
+            </p>
+
           </div>
         </CardContent>
       </Card>
