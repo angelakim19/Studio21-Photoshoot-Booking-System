@@ -130,7 +130,7 @@ export function Footer() {
                 <div className="w-8 h-8 rounded-full bg-[#C8A96A]/10 flex items-center justify-center flex-shrink-0">
                   <MapPin className="h-4 w-4 text-[#C8A96A]" />
                 </div>
-                <span>P10 Poblacion Quillo Bldg.<br />Valencia City, Bukidnon</span>
+                <span>P-10 Poblacion Quillo Bldg.<br />Valencia City, Bukidnon</span>
               </li>
             </ul>
           </div>
