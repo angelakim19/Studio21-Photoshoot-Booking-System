@@ -12,7 +12,6 @@ type Profile = {
   last_name?: string
   email?: string
   phone?: string
-  address?: string
 }
 
 export default function ProfilePage() {
@@ -21,13 +20,29 @@ export default function ProfilePage() {
     last_name: "",
     email: "",
     phone: "",
-    address: "",
   })
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [toastOpen, setToastOpen] = useState(false)
+  const [toastTimer, setToastTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+
+  const showSuccessToast = () => {
+    setToastOpen(true)
+    if (toastTimer) clearTimeout(toastTimer)
+    const timer = setTimeout(() => setToastOpen(false), 3000)
+    setToastTimer(timer)
+  }
 
   useEffect(() => {
+    let isMounted = true
+
     const load = async () => {
+      setIsLoading(true)
       const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) return
+      if (!authUser) {
+        if (isMounted) setIsLoading(false)
+        return
+      }
 
       const metadata = authUser.user_metadata as {
         first_name?: string
@@ -38,20 +53,31 @@ export default function ProfilePage() {
       // Match dashboard strategy: fetch profile row by authenticated user id.
       const { data: dbUser } = await supabase
         .from('users')
-        .select('first_name,last_name,email,phone,address')
+        .select('first_name,last_name,email,phone')
         .eq('id', authUser.id)
         .maybeSingle()
+
+      if (!isMounted) return
 
       setUser({
         first_name: dbUser?.first_name || metadata.first_name || "",
         last_name: dbUser?.last_name || metadata.last_name || "",
         email: dbUser?.email || authUser.email || "",
         phone: dbUser?.phone || metadata.phone || "",
-        address: dbUser?.address || "",
       })
+      setIsLoading(false)
     }
 
     load()
+
+    const { data: authSubscription } = supabase.auth.onAuthStateChange(() => {
+      load()
+    })
+
+    return () => {
+      isMounted = false
+      authSubscription.subscription.unsubscribe()
+    }
   }, [])
 
   const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ")
@@ -78,8 +104,13 @@ export default function ProfilePage() {
             <div>
               <p className="font-semibold text-lg text-[#111111]">{fullName || "Your name"}</p>
               <p className="text-sm text-gray-500">Client</p>
+              <p className="text-xs text-gray-400">{user.email || ""}</p>
             </div>
           </div>
+
+          {isLoading ? (
+            <p className="text-sm text-gray-500">Loading profile...</p>
+          ) : null}
 
           <div className="grid gap-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -104,16 +135,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="profile-email">Email</Label>
-              <Input
-                id="profile-email"
-                className="h-12 rounded-xl border-[#ded3c1] bg-white"
-                value={user.email}
-                onChange={(e) => setUser({ ...user, email: e.target.value })}
-              />
-            </div>
-
             <div className="grid gap-2 md:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="profile-phone">Phone</Label>
@@ -124,16 +145,6 @@ export default function ProfilePage() {
                   onChange={(e) => setUser({ ...user, phone: e.target.value })}
                 />
               </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="profile-address">Address</Label>
-                <Input
-                  id="profile-address"
-                  className="h-12 rounded-xl border-[#ded3c1] bg-white"
-                  value={user.address}
-                  onChange={(e) => setUser({ ...user, address: e.target.value })}
-                />
-              </div>
             </div>
           </div>
 
@@ -142,23 +153,38 @@ export default function ProfilePage() {
               onClick={async () => {
                 const { data: { user: authUser } } = await supabase.auth.getUser()
                 if (!authUser) return alert('Not authenticated')
-                const { error } = await supabase.from('users').update({
-                  first_name: user.first_name,
-                  last_name: user.last_name,
-                  email: user.email,
-                  phone: user.phone,
-                  address: user.address,
-                }).eq('id', authUser.id)
-                if (error) return alert('Failed to save')
-                alert('Profile saved')
+                setIsSaving(true)
+                try {
+                  const { error } = await supabase
+                    .from('users')
+                    .upsert({
+                      id: authUser.id,
+                      first_name: user.first_name,
+                      last_name: user.last_name,
+                      phone: user.phone,
+                    }, { onConflict: 'id' })
+
+                  if (error) return alert('Failed to save')
+                  showSuccessToast()
+                } finally {
+                  setIsSaving(false)
+                }
               }}
+              disabled={isSaving}
               className="h-12 rounded-full bg-[#111111] px-6 text-white hover:bg-[#222222]"
             >
-              Save Changes
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      {toastOpen && (
+        <div className="fixed right-6 top-6 z-50 w-[320px] rounded-2xl border border-emerald-200 bg-white p-4 shadow-[0_18px_50px_rgba(17,17,17,0.18)]">
+          <p className="text-sm font-semibold text-emerald-700">Success</p>
+          <p className="mt-1 text-sm text-gray-600">Your changes are saved successfully.</p>
+        </div>
+      )}
     </div>
   )
 }

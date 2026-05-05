@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { Calendar, User, LayoutDashboard, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { Calendar, User, LayoutDashboard, Settings, LogOut, Menu } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -14,12 +14,22 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
   const router = useRouter()
   const [userName, setUserName] = useState("User")
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [logoutSuccessOpen, setLogoutSuccessOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
   useEffect(() => {
+    let isActive = true
+
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!isActive) return
+
+      if (!user) {
+        router.replace("/")
+        setIsCheckingAuth(false)
+        return
+      }
 
       const { data: dbUser } = await supabase
         .from("users")
@@ -29,10 +39,29 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
 
       const firstName = dbUser?.first_name || user.user_metadata?.first_name || user.email?.split("@")[0] || "User"
       setUserName(firstName)
+      setIsCheckingAuth(false)
     }
 
     load()
-  }, [])
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.replace("/")
+        return
+      }
+
+      const firstName =
+        session.user.user_metadata?.first_name ||
+        session.user.email?.split("@")[0] ||
+        "User"
+      setUserName(firstName)
+    })
+
+    return () => {
+      isActive = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [router])
 
   const menu = [
     { name: "Dashboard", href: "/user", icon: LayoutDashboard },
@@ -41,6 +70,14 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
     { name: "Settings", href: "/user/settings", icon: Settings },
   ]
 
+  if (isCheckingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] text-sm text-gray-500">
+        Loading...
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen">
       <aside
@@ -48,24 +85,28 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
           collapsed ? "w-[88px]" : "w-[300px]"
         }`}
       >
-        <button
-          onClick={() => setCollapsed((prev) => !prev)}
-          className="absolute -right-3 top-8 z-10 h-8 w-8 rounded-md bg-[#1f1f1f] text-gray-200 border border-[#2a2a2a] flex items-center justify-center hover:text-white"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
+        
 
         <div>
-          <div className={`mb-8 flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-            <Image src="/favicon.png" alt="logo" width={40} height={40} />
-            {!collapsed && (
-              <div>
-                <h2 className="font-serif text-xl">Studio 21</h2>
-                <p className="text-sm text-[#C8A96A]">User Dashboard</p>
+          <div className={`mb-8 flex items-center ${collapsed ? "justify-between" : "justify-between gap-3"}`}>
+            {!collapsed ? (
+              <div className="flex items-center gap-3">
+                <Image src="/favicon.png" alt="logo" width={40} height={40} />
+                <div>
+                  <h2 className="font-serif text-xl">Studio 21</h2>
+                  <p className="text-sm text-[#C8A96A]">User Dashboard</p>
+                </div>
               </div>
+            ) : (
+              <div />
             )}
+
+            <button
+              onClick={() => setCollapsed((prev) => !prev)}
+              className="ml-auto flex items-center"
+            >
+              <Menu size={24} />
+            </button>
           </div>
 
           <hr className="mb-6 border-gray-800" />
@@ -133,7 +174,12 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
             <Button
               onClick={async () => {
                 await supabase.auth.signOut()
-                router.push("/")
+                setLogoutOpen(false)
+                setLogoutSuccessOpen(true)
+                setTimeout(() => {
+                  setLogoutSuccessOpen(false)
+                  router.replace("/")
+                }, 1500)
               }}
               className="rounded-full bg-[#111111] px-5 text-white hover:bg-[#222222]"
             >
@@ -142,6 +188,15 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {logoutSuccessOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-[320px] rounded-2xl bg-white p-6 text-center shadow-lg">
+            <h2 className="mb-2 text-lg font-semibold">Log out Successful!</h2>
+            <p className="text-sm text-gray-600">Redirecting to the landing page...</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

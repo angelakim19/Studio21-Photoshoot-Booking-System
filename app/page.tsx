@@ -79,11 +79,13 @@ export default function LandingPage() {
   // Slider images and timer (studio + 5 slider images)
   const sliderImages = [
     "/images/studio.jpg",
-    "/images/slider-image1.jpg",
-    "/images/slider-image2.jpg",
+    "/images/slider-image9.jpg",
+    "/images/slider-image8.jpg",
     "/images/slider-image3.jpg",
     "/images/slider-image4.jpg",
     "/images/slider-image5.jpg",
+    "/images/slider-image6.jpg",
+    "/images/slider-image10.jpg",
   ];
 
   const [slideIndex, setSlideIndex] = useState(0);

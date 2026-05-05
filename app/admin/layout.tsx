@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
-import { Calendar, Users, BarChart3, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { Calendar, Users, BarChart3, Settings, LogOut, Menu } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -17,13 +17,14 @@ export default function AdminLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [logoutSuccessOpen, setLogoutSuccessOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 
   const menu = [
     { name: "Calendar", href: "/admin", icon: Calendar },
     { name: "Clients", href: "/admin/clients", icon: Users },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
-    { name: "Settings", href: "#", icon: Settings },
+    { name: "Settings", href: "/admin/settings", icon: Settings },
   ]
 
   return (
@@ -36,25 +37,29 @@ export default function AdminLayout({
         }`}
       >
 
-        <button
-          onClick={() => setCollapsed((prev) => !prev)}
-          className="absolute -right-3 top-8 z-10 h-8 w-8 rounded-md bg-[#1f1f1f] text-gray-200 border border-[#2a2a2a] flex items-center justify-center hover:text-white"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
+        
 
         <div>
           {/* LOGO */}
-          <div className={`mb-8 flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-            <Image src="/favicon.png" alt="logo" width={40} height={40} />
-            {!collapsed && (
-              <div>
-                <h2 className="font-serif text-xl">Studio 21</h2>
-                <p className="text-sm text-[#C8A96A]">Admin Dashboard</p>
+          <div className={`mb-8 flex items-center ${collapsed ? "justify-between" : "justify-between gap-3"}`}>
+            {!collapsed ? (
+              <div className="flex items-center gap-3">
+                <Image src="/favicon.png" alt="logo" width={40} height={40} />
+                <div>
+                  <h2 className="font-serif text-xl">Studio 21</h2>
+                  <p className="text-sm text-[#C8A96A]">Admin Dashboard</p>
+                </div>
               </div>
+            ) : (
+              <div />
             )}
+
+            <button
+              onClick={() => setCollapsed((prev) => !prev)}
+              className="ml-auto flex items-center"
+            >
+              <Menu size={24} />
+            </button>
           </div>
 
           <hr className="border-gray-800 mb-6" />
@@ -86,23 +91,20 @@ export default function AdminLayout({
         </div>
 
         {/* USER FOOTER */}
-        <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-3`}>
-          <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-            <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center">
-              <span>A</span>
-            </div>
-            {!collapsed && (
-              <div>
-                <p className="text-sm">Admin</p>
-                <p className="text-xs text-gray-400">Studio 21</p>
-              </div>
-            )}
+        <div className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3`}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black shrink-0">
+            <span>A</span>
           </div>
-
+          {!collapsed && (
+            <div className="flex-1">
+              <p className="text-sm">Admin</p>
+              <p className="text-xs text-gray-400">Studio 21</p>
+            </div>
+          )}
           <button
             onClick={() => setLogoutOpen(true)}
             title={collapsed ? "Log out" : undefined}
-            className="flex items-center gap-2 text-gray-300 hover:text-white transition"
+            className="flex items-center gap-2 text-gray-300 hover:text-white"
           >
             <LogOut size={16} />
             {!collapsed && <span className="text-sm">Log out</span>}
@@ -131,7 +133,12 @@ export default function AdminLayout({
             <Button
               onClick={async () => {
                 await supabase.auth.signOut()
-                router.push("/")
+                setLogoutOpen(false)
+                setLogoutSuccessOpen(true)
+                setTimeout(() => {
+                  setLogoutSuccessOpen(false)
+                  router.replace("/")
+                }, 1500)
               }}
               className="rounded-full bg-[#111111] px-5 text-white hover:bg-[#222222]"
             >
@@ -140,6 +147,15 @@ export default function AdminLayout({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {logoutSuccessOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-[320px] rounded-2xl bg-white p-6 text-center shadow-lg">
+            <h2 className="mb-2 text-lg font-semibold">Log out Successful!</h2>
+            <p className="text-sm text-gray-600">Redirecting to the landing page...</p>
+          </div>
+        </div>
+      )}
 
     </div>
   )

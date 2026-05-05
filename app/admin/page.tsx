@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { 
   Calendar, Users, BarChart3, Settings, LogOut,
   ChevronLeft, ChevronRight, Clock, User, DollarSign, Sparkles
@@ -17,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
+import { supabase } from "@/lib/supabaseClient"
 
 interface Appointment {
   id: string
@@ -90,6 +92,7 @@ const statusBarColors = {
 }
 
 export default function AdminDashboardPage() {
+  const router = useRouter()
   const [currentDate, setCurrentDate] = useState(new Date(2026, 4, 15))
   const [selectedDate, setSelectedDate] = useState<Date>(new Date(2026, 4, 15))
   
@@ -156,6 +159,15 @@ export default function AdminDashboardPage() {
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Calendar Section */}
         <div className="flex-1 p-6 md:p-10 overflow-y-auto">
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Overview</p>
+              <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Admin Dashboard</h1>
+            </div>
+
+            
+          </div>
+
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
             <Card className="border-0 shadow-sm bg-white">

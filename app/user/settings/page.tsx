@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import { Eye, EyeOff } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,44 +10,80 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 export default function SettingsPage() {
-	const [language, setLanguage] = useState("en")
+	const [previousPassword, setPreviousPassword] = useState("")
 	const [password, setPassword] = useState("")
+	const [previousPasswordError, setPreviousPasswordError] = useState("")
+	const [passwordError, setPasswordError] = useState("")
+	const [showPreviousPassword, setShowPreviousPassword] = useState(false)
+	const [showNewPassword, setShowNewPassword] = useState(false)
 	const [logoutOpen, setLogoutOpen] = useState(false)
+	const [logoutSuccessOpen, setLogoutSuccessOpen] = useState(false)
 	const [deleteOpen, setDeleteOpen] = useState(false)
-	const [isSaving, setIsSaving] = useState(false)
+	const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(false)
+	const [isChanging, setIsChanging] = useState(false)
+	const [toastOpen, setToastOpen] = useState(false)
+	const [toastTimer, setToastTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
-	useEffect(() => {
-		const load = async () => {
-			const { data: { user } } = await supabase.auth.getUser()
-			if (!user) return
-			const { data: dbUser } = await supabase.from('users').select('language').eq('id', user.id).maybeSingle()
-			if (dbUser?.language) setLanguage(dbUser.language)
-		}
-		load()
-	}, [])
-
-	const saveSettings = async () => {
-		setIsSaving(true)
-		const { data: { user } } = await supabase.auth.getUser()
-		if (!user) {
-			setIsSaving(false)
-			return alert('Not authenticated')
-		}
-		const { error } = await supabase.from('users').update({ language }).eq('id', user.id)
-		if (error) {
-			setIsSaving(false)
-			return alert('Failed to save settings')
-		}
-		setIsSaving(false)
-		alert('Settings saved')
+	const showSuccessToast = () => {
+		setToastOpen(true)
+		if (toastTimer) clearTimeout(toastTimer)
+		const timer = setTimeout(() => setToastOpen(false), 3000)
+		setToastTimer(timer)
 	}
 
 	const changePassword = async () => {
-		if (!password) return alert('Enter a new password')
-		const { error } = await supabase.auth.updateUser({ password })
-		if (error) return alert('Failed to change password')
-		alert('Password updated')
-		setPassword("")
+		setPreviousPasswordError("")
+		setPasswordError("")
+
+		let hasError = false
+
+		if (!previousPassword) {
+			setPreviousPasswordError('Enter password')
+			hasError = true
+		}
+
+		if (!password) {
+			setPasswordError('Enter password')
+			hasError = true
+		}
+
+		if (previousPassword && password && previousPassword === password) {
+			setPasswordError('New password cannot match current password')
+			hasError = true
+		}
+
+		if (hasError) return
+
+		setIsChanging(true)
+		try {
+			const { data: { user } } = await supabase.auth.getUser()
+			if (!user?.email) {
+				setPreviousPasswordError('Not authenticated')
+				return
+			}
+
+			const { error: signInError } = await supabase.auth.signInWithPassword({
+				email: user.email,
+				password: previousPassword,
+			})
+
+			if (signInError) {
+				setPreviousPasswordError('Previous password is incorrect')
+				return
+			}
+
+			const { error } = await supabase.auth.updateUser({ password })
+			if (error) {
+				setPasswordError(error.message || 'Failed to change password')
+				return
+			}
+
+			setPreviousPassword("")
+			setPassword("")
+			showSuccessToast()
+		} finally {
+			setIsChanging(false)
+		}
 	}
 
 	const deleteAccount = async () => {
@@ -55,7 +92,12 @@ export default function SettingsPage() {
 		const { error } = await supabase.from('users').delete().eq('id', user.id)
 		if (error) return alert('Failed to delete account')
 		await supabase.auth.signOut()
-		window.location.href = '/'
+		setDeleteOpen(false)
+		setDeleteSuccessOpen(true)
+		setTimeout(() => {
+			setDeleteSuccessOpen(false)
+			window.location.replace('/')
+		}, 1500)
 	}
 
 	return (
@@ -67,39 +109,70 @@ export default function SettingsPage() {
 
 			<Card className="max-w-2xl rounded-[28px] border-[#ece4d7] bg-[#fbf7f1] shadow-[0_18px_50px_rgba(17,17,17,0.08)]">
 				<CardHeader className="border-b border-[#ece4d7] pb-6">
-					<CardTitle className="font-serif text-2xl text-[#111111]">Preferences & Security</CardTitle>
+					<CardTitle className="font-serif text-2xl text-[#111111]">Security</CardTitle>
 					<p className="text-sm text-gray-500">Keep your account settings aligned with your profile and bookings.</p>
 				</CardHeader>
 
 				<CardContent className="space-y-6 p-6 md:p-8">
-					<div className="grid gap-2">
-						<Label htmlFor="language">Language preference</Label>
-						<select
-							id="language"
-							value={language}
-							onChange={(e) => setLanguage(e.target.value)}
-							className="h-12 rounded-xl border border-[#ded3c1] bg-white px-4"
-						>
-							<option value="en">English</option>
-							<option value="ph">Filipino</option>
-						</select>
-					</div>
-
 					<div className="grid gap-3 rounded-2xl bg-white p-4 shadow-sm">
 						<div>
-							<h3 className="font-semibold text-[#111111]">Security</h3>
-							<p className="text-sm text-gray-500">Change your password</p>
+							<h3 className="font-semibold text-[#111111]">Change password</h3>
 						</div>
-						<div className="flex flex-col gap-3 md:flex-row">
-							<Input
-								type="password"
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								className="h-12 rounded-xl border-[#ded3c1] bg-white"
-								placeholder="New password"
-							/>
-							<Button onClick={changePassword} className="h-12 rounded-full bg-[#111111] px-6 text-white hover:bg-[#222222]">
-								Change
+						<div className="grid gap-3">
+							<div className="grid gap-2">
+								<Label htmlFor="previous-password">Current password</Label>
+								<div className="relative">
+									<Input
+										id="previous-password"
+										type={showPreviousPassword ? "text" : "password"}
+										value={previousPassword}
+										onChange={(e) => {
+											setPreviousPassword(e.target.value)
+											if (previousPasswordError) setPreviousPasswordError("")
+										}}
+										className="h-12 rounded-xl border-[#ded3c1] bg-white pr-12"
+										placeholder="Current password"
+									/>
+									<button
+										type="button"
+										className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-[#C8A96A]"
+										onClick={() => setShowPreviousPassword((prev) => !prev)}
+									>
+										{showPreviousPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+									</button>
+								</div>
+								{previousPasswordError && (
+									<p className="text-xs font-medium text-red-600">{previousPasswordError}</p>
+								)}
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="new-password">New password</Label>
+								<div className="relative">
+									<Input
+										id="new-password"
+										type={showNewPassword ? "text" : "password"}
+										value={password}
+										onChange={(e) => {
+											setPassword(e.target.value)
+											if (passwordError) setPasswordError("")
+										}}
+										className="h-12 rounded-xl border-[#ded3c1] bg-white pr-12"
+										placeholder="New password"
+									/>
+									<button
+										type="button"
+										className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-[#C8A96A]"
+										onClick={() => setShowNewPassword((prev) => !prev)}
+									>
+										{showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+									</button>
+								</div>
+								{passwordError && (
+									<p className="text-xs font-medium text-red-600">{passwordError}</p>
+								)}
+							</div>
+							<Button onClick={changePassword} disabled={isChanging} className="h-12 rounded-full bg-[#111111] px-6 text-white hover:bg-[#222222]">
+								{isChanging ? 'Changing...' : 'Change'}
 							</Button>
 						</div>
 					</div>
@@ -116,14 +189,15 @@ export default function SettingsPage() {
 		
 						</div>
 					</div>
-
-					<div className="flex justify-end">
-						<Button onClick={saveSettings} disabled={isSaving} className="h-12 rounded-full bg-[#C8A96A] px-6 text-black hover:bg-[#b8985d]">
-							{isSaving ? 'Saving...' : 'Save Changes'}
-						</Button>
-					</div>
 				</CardContent>
 			</Card>
+
+			{toastOpen && (
+				<div className="fixed right-6 top-6 z-50 w-[320px] rounded-2xl border border-emerald-200 bg-white p-4 shadow-[0_18px_50px_rgba(17,17,17,0.18)]">
+					<p className="text-sm font-semibold text-emerald-700">Success</p>
+					<p className="mt-1 text-sm text-gray-600">Your changes are saved successfully.</p>
+				</div>
+			)}
 
 			<Dialog open={logoutOpen} onOpenChange={setLogoutOpen}>
 				<DialogContent className="rounded-3xl border-[#ece4d7] bg-[#fffaf2] shadow-[0_18px_50px_rgba(17,17,17,0.16)]">
@@ -140,7 +214,12 @@ export default function SettingsPage() {
 						<Button
 							onClick={async () => {
 								await supabase.auth.signOut()
-								window.location.href = '/'
+								setLogoutOpen(false)
+								setLogoutSuccessOpen(true)
+								setTimeout(() => {
+									setLogoutSuccessOpen(false)
+									window.location.replace('/')
+								}, 1500)
 							}}
 							className="rounded-full bg-[#111111] px-5 text-white hover:bg-[#222222]"
 						>
@@ -149,6 +228,15 @@ export default function SettingsPage() {
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
+
+			{logoutSuccessOpen && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+					<div className="w-[320px] rounded-2xl bg-white p-6 text-center shadow-lg">
+						<h2 className="mb-2 text-lg font-semibold">Log out Successful!</h2>
+						<p className="text-sm text-gray-600">Redirecting to the landing page...</p>
+					</div>
+				</div>
+			)}
 
 			<Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
 				<DialogContent className="rounded-3xl border-[#ece4d7] bg-[#fffaf2] shadow-[0_18px_50px_rgba(17,17,17,0.16)]">
@@ -171,6 +259,15 @@ export default function SettingsPage() {
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
+
+			{deleteSuccessOpen && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+					<div className="w-[320px] rounded-2xl bg-white p-6 text-center shadow-lg">
+						<h2 className="mb-2 text-lg font-semibold">Account Deleted!</h2>
+						<p className="text-sm text-gray-600">Redirecting to the landing page...</p>
+					</div>
+				</div>
+			)}
 		</div>
 	)
 }
