@@ -1,5 +1,3 @@
-"use client"
-
 import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -11,14 +9,19 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
-import { useState } from "react"
-import { Calendar, Users, BarChart3, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
-import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export default function AdminLayout({
   children,
@@ -129,7 +132,6 @@ export default function AdminLayout({
         </div>
 
         </aside>
-      )}
 
       {/* ================= CONTENT ================= */}
       <main className="flex-1 p-8 transition-all duration-300">
