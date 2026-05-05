@@ -21,9 +21,9 @@ export default function FeaturedPage() {
       router.push("/booking")
     }
     const images = [
+      "/images/featured3.jpg",
       "/images/featured1.jpg",
       "/images/featured2.jpg",
-      "/images/featured3.jpg",
       "/images/featured10.jpg",
       "/images/featured6.jpg",
       "/images/featured7.jpg",
