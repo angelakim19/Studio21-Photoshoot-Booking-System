@@ -10,8 +10,7 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Menu,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -31,13 +30,6 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname()
   const router = useRouter()
-
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.replace("/login")
-  }
 
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [logoutSuccessOpen, setLogoutSuccessOpen] = useState(false)
@@ -90,11 +82,7 @@ export default function AdminLayout({
           collapsed ? "w-[88px]" : "w-[300px]"
         }`}
       >
-
-        
-
         <div>
-          {/* LOGO */}
           <div className={`mb-8 flex items-center ${collapsed ? "justify-between" : "justify-between gap-3"}`}>
             {!collapsed ? (
               <div className="flex items-center gap-3">
@@ -167,7 +155,6 @@ export default function AdminLayout({
 
         </aside>
 
-      {/* ================= CONTENT ================= */}
       <main className="flex-1 p-8 transition-all duration-300">
         {children}
       </main>
