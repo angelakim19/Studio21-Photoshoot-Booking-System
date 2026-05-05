@@ -1,4 +1,5 @@
-import { useState } from "react"
+"use client"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
@@ -35,20 +36,51 @@ export default function AdminLayout({
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    router.push("/login")
+    router.replace("/login")
   }
+
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 
   const menu = [
     { name: "Calendar", href: "/admin", icon: Calendar },
-    { name: "Appointments", href: "/admin/appointments", icon: CalendarDays },
+    { name: "Appointments", href: "/admin/appointments", icon:   CalendarDays },
     { name: "Clients", href: "/admin/clients", icon: Users },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { name: "Settings", href: "#", icon: Settings },
   ]
 
-  return (
+    useEffect(() => {
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getSession()
+
+      if (!data.session) {
+        router.replace("/login")
+        return
+      }
+
+      const { data: userData } = await supabase.auth.getUser()
+      const user = userData.user
+
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+
+      const { data: profile } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profile?.role !== "admin") {
+        router.replace("/user")
+      }
+    }
+
+    checkAuth()
+  }, [])
+    return (
     <div className="flex min-h-screen bg-[#F5F5F5]">
 
       {/* SIDEBAR */}
@@ -153,7 +185,7 @@ export default function AdminLayout({
             <Button
               onClick={async () => {
                 await supabase.auth.signOut()
-                router.push("/")
+                router.push("/login")
               }}
               className="rounded-full bg-[#111111] px-5 text-white hover:bg-[#222222]"
             >

@@ -81,7 +81,7 @@ function monthRange(y: number, m: number) {
   }
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+
 
 const statusColors: Record<string, string> = {
   approved:  "bg-green-50 text-green-700 border-green-200",
@@ -549,7 +549,7 @@ export default function AdminDashboardPage() {
                       onChange={e => setBlockReason(e.target.value)}
                       placeholder="e.g. Holiday, Studio maintenance, Personal day…"
                       rows={3}
-                      className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#C8A96A]/40 focus:border-[#C8A96A] placeholder:text-gray-300"
+                      className="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#C8A96A]/40       focus:border-[#C8A96A] placeholder:text-gray-300"
                     />
                   </div>
                   <button
