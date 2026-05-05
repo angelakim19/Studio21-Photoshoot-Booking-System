@@ -1,13 +1,28 @@
 "use client"
-
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
-import { useState } from "react"
-import { Calendar, Users, BarChart3, Settings, LogOut, Menu } from "lucide-react"
+import {
+  Calendar,
+  CalendarDays,
+  Users,
+  BarChart3,
+  Settings,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export default function AdminLayout({
   children,
@@ -16,19 +31,58 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.replace("/login")
+  }
+
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [logoutSuccessOpen, setLogoutSuccessOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 
   const menu = [
     { name: "Calendar", href: "/admin", icon: Calendar },
+    { name: "Appointments", href: "/admin/appointments", icon:   CalendarDays },
     { name: "Clients", href: "/admin/clients", icon: Users },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     { name: "Settings", href: "/admin/settings", icon: Settings },
   ]
 
-  return (
-    <div className="flex min-h-screen">
+    useEffect(() => {
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getSession()
+
+      if (!data.session) {
+        router.replace("/login")
+        return
+      }
+
+      const { data: userData } = await supabase.auth.getUser()
+      const user = userData.user
+
+      if (!user) {
+        router.replace("/login")
+        return
+      }
+
+      const { data: profile } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      if (profile?.role !== "admin") {
+        router.replace("/user")
+      }
+    }
+
+    checkAuth()
+  }, [])
+    return (
+    <div className="flex min-h-screen bg-[#F5F5F5]">
 
       {/* SIDEBAR */}
       <aside
@@ -111,10 +165,10 @@ export default function AdminLayout({
           </button>
         </div>
 
-      </aside>
+        </aside>
 
-      {/* CONTENT */}
-      <main className="flex-1 bg-[#F5F5F5] p-8">
+      {/* ================= CONTENT ================= */}
+      <main className="flex-1 p-8 transition-all duration-300">
         {children}
       </main>
 
@@ -133,12 +187,7 @@ export default function AdminLayout({
             <Button
               onClick={async () => {
                 await supabase.auth.signOut()
-                setLogoutOpen(false)
-                setLogoutSuccessOpen(true)
-                setTimeout(() => {
-                  setLogoutSuccessOpen(false)
-                  router.replace("/")
-                }, 1500)
+                router.push("/login")
               }}
               className="rounded-full bg-[#111111] px-5 text-white hover:bg-[#222222]"
             >

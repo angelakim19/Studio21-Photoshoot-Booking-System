@@ -49,12 +49,15 @@ export function Header() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
+            <Link href="/our-story" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+              Our Story
+            </Link>
             <Link href="/#services" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
               Services
             </Link>
             <Link href="/#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
               How It Works
-            </Link>
+            </Link>          
             <Link href="/#location" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
               Location
             </Link>
@@ -64,6 +67,9 @@ export function Header() {
             >
               Book Now
             </button>
+            <Link href="/our-work" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+              Our Works
+            </Link>
           </nav>
 
           <div className="hidden md:flex items-center gap-3">

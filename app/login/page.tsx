@@ -19,13 +19,29 @@ export default function LoginPage() {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
 
-      if (data.session) {
+      if (!data.session) return;
+
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
+
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.role === "admin") {
+        router.replace("/admin");
+      } else {
         router.replace("/user");
       }
     };
 
     checkSession();
   }, []);
+  
   const [showModal, setShowModal] = useState(false);
     const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
