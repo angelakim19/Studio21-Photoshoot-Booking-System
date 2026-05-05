@@ -91,6 +91,7 @@ export default function LandingPage() {
               fill
               className="object-cover object-center"
               priority
+              loading="eager"
             />
           </div>
           <div className="container mx-auto px-4 relative z-20">

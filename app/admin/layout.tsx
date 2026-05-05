@@ -2,14 +2,16 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Calendar,
   CalendarDays,
   Users,
   BarChart3,
   Settings,
+  LogOut,
 } from "lucide-react"
+import { supabase } from "@/lib/supabaseClient"
 
 export default function AdminLayout({
   children,
@@ -17,6 +19,12 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push("/login")
+  }
 
   const menu = [
     { name: "Calendar", href: "/admin", icon: Calendar },
@@ -73,10 +81,15 @@ export default function AdminLayout({
         </div>
 
         {/* USER FOOTER */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center">
-            <span>N</span>
-          </div>
+        <div className="flex flex-col gap-3">
+          <hr className="border-gray-800" />
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-300 hover:bg-red-500/10 hover:text-red-400 transition-colors w-full group"
+          >
+            <LogOut size={18} className="group-hover:translate-x-0.5 transition-transform" />
+            <span className="text-sm font-medium">Logout</span>
+          </button>
         </div>
 
       </aside>
