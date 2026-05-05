@@ -76,26 +76,79 @@ export default function LandingPage() {
     }
   };
 
+  // Slider images and timer (studio + 5 slider images)
+  const sliderImages = [
+    "/images/studio.jpg",
+    "/images/slider-image1.jpg",
+    "/images/slider-image2.jpg",
+    "/images/slider-image3.jpg",
+    "/images/slider-image4.jpg",
+    "/images/slider-image5.jpg",
+  ];
+
+  const [slideIndex, setSlideIndex] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSlideIndex((s) => (s + 1) % sliderImages.length), 4500);
+    return () => clearInterval(t);
+  }, []);
+
+  const goToPrevSlide = () => {
+    setSlideIndex((s) => (s - 1 + sliderImages.length) % sliderImages.length);
+  };
+
+  const goToNextSlide = () => {
+    setSlideIndex((s) => (s + 1) % sliderImages.length);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
       
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-white via-white/95 to-transparent z-10" />
-          <div className="absolute right-0 top-0 w-full md:w-2/3 h-full overflow-hidden">
-            <Image
-              src="/images/studio.jpg"
-              alt="Studio 21 Interior"
-              fill
-              className="object-cover object-center"
-              priority
-              loading="eager"
-            />
+        <section className="group relative overflow-hidden min-h-[520px] md:min-h-[500px] lg:min-h-[620px]">
+          <div className="absolute inset-0 bg-gradient-to-r from-white via-white/70 to-transparent z-10" />
+          <div className="absolute inset-0 w-full h-full">
+            {sliderImages.map((src, i) => (
+              <div
+                key={src}
+                className={`absolute inset-0 transition-opacity duration-700 ${i === slideIndex ? "opacity-100" : "opacity-0"}`}
+              >
+                <Image src={src} alt={`slide-${i}`} fill className="object-cover object-center" />
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={goToPrevSlide}
+            aria-label="Previous slide"
+            className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-30 h-8 w-8 md:h-10 md:w-10 rounded-full bg-black/35 text-white text-base md:text-xl leading-none hover:bg-black/50 transition-opacity duration-200 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
+          >
+            &lt;
+          </button>
+          <button
+            type="button"
+            onClick={goToNextSlide}
+            aria-label="Next slide"
+            className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-30 h-8 w-8 md:h-10 md:w-10 rounded-full bg-black/35 text-white text-base md:text-xl leading-none hover:bg-black/50 transition-opacity duration-200 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
+          >
+            &gt;
+          </button>
+          <div className="absolute bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
+            {sliderImages.map((_, i) => (
+              <button
+                key={`dot-${i}`}
+                type="button"
+                aria-label={`Go to slide ${i + 1}`}
+                onClick={() => setSlideIndex(i)}
+                className={`h-2.5 w-2.5 rounded-full transition ${
+                  i === slideIndex ? "bg-white" : "bg-white/50 hover:bg-white/80"
+                }`}
+              />
+            ))}
           </div>
           <div className="container mx-auto px-4 relative z-20">
-            <div className="py-24 lg:py-36 max-w-2xl">
+            <div className="py-14 md:py-16 lg:py-20 max-w-2xl">
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#C8A96A]/10 text-[#C8A96A] text-sm font-medium mb-6">
                 <Sparkles className="h-4 w-4" />
                 <span>Premium Photography Studio</span>

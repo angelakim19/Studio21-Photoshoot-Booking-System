@@ -141,15 +141,29 @@
     display: none;
   }
 }
-html,
-body {
-  overflow-x: hidden;
-  scrollbar-width: none !important;
-  -ms-overflow-style: none !important;
+
+@keyframes slideUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.4s ease-out;
+}
+/* Hide scrollbar for all browsers */
+html, body {
+  overflow-y: scroll; /* keep scrolling working */
+  -ms-overflow-style: none;  /* IE & Edge */
+  scrollbar-width: none;     /* Firefox */
 }
 
 html::-webkit-scrollbar,
 body::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
+  display: none; /* Chrome, Safari */
 }

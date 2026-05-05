@@ -27,6 +27,9 @@ export function Footer() {
     }
   };
 
+  const [modal, setModal] = useState<"privacy" | "terms" | null>(null)
+
+
   return (
     <footer className="bg-[#1a1a1a] text-white/90">
       <div className="container mx-auto px-4 py-16">
@@ -130,7 +133,7 @@ export function Footer() {
                 <div className="w-8 h-8 rounded-full bg-[#C8A96A]/10 flex items-center justify-center flex-shrink-0">
                   <MapPin className="h-4 w-4 text-[#C8A96A]" />
                 </div>
-                <span>P10 Poblacion Quillo Bldg.<br />Valencia City, Bukidnon</span>
+                <span>P-10 Poblacion Quillo Bldg.<br />Valencia City, Bukidnon</span>
               </li>
             </ul>
           </div>
@@ -159,8 +162,19 @@ export function Footer() {
             &copy; {new Date().getFullYear()} Studio 21 M N&apos; B Photography. All rights reserved.
           </p>
           <div className="flex gap-6 text-sm text-white/40">
-            <a href="#" className="hover:text-[#C8A96A] transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-[#C8A96A] transition-colors">Terms of Service</a>
+            <button
+              onClick={() => setModal("privacy")}
+              className="hover:text-[#C8A96A] transition-colors"
+            >
+              Privacy Policy
+            </button>
+
+            <button
+              onClick={() => setModal("terms")}
+              className="hover:text-[#C8A96A] transition-colors"
+            >
+              Terms of Service
+            </button>
           </div>
         </div>
       </div>
@@ -195,6 +209,73 @@ export function Footer() {
           </div>
         </div>
       )}          
-    </footer>
+      {modal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+
+          {/* DARK BACKDROP */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-500"
+            onClick={() => setModal(null)}
+          />
+
+          {/* CONTENT (NO CARD) */}
+          <div
+            className="relative w-full max-w-3xl px-6 pb-20 text-center text-white animate-slideUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE */}
+            <button
+              onClick={() => setModal(null)}
+              className="absolute right-6 top-0 text-white/60 hover:text-white text-xl"
+            >
+              ✕
+            </button>
+
+            {modal === "privacy" && (
+              <>
+                <h2 className="text-3xl font-serif mb-6">Privacy Policy</h2>
+                <p className="text-white/80 leading-relaxed space-y-4">
+                  Your privacy matters to us. Studio 21 is committed to protecting the information you share when using our website and booking services.
+                  <br /><br />
+
+                  We collect only the necessary details required to process your bookings, including your name, contact information, and session preferences. 
+                  This information allows us to provide a smooth and personalized experience.
+                  <br /><br />
+
+                  Your data is handled with care and will never be sold or shared with third parties without your consent, unless required by law or necessary to complete your requested service.
+                  <br /><br />
+
+                  We implement appropriate security measures to protect your information and ensure it remains confidential.
+                  <br /><br />
+
+                  By using our platform, you agree to the collection and use of your information in accordance with this policy.
+                </p>
+              </>
+            )}
+
+            {modal === "terms" && (
+              <>
+                <h2 className="text-3xl font-serif mb-6">Terms of Service</h2>
+                <p className="text-white/80 leading-relaxed space-y-4">
+                  By using Studio 21’s services, you agree to provide accurate and complete booking information.
+                  <br /><br />
+
+                  All bookings are subject to availability and confirmation. Clients are expected to follow agreed schedules to ensure a smooth session.
+                  <br /><br />
+
+                  Studio 21 reserves the right to manage, reschedule, or cancel bookings when necessary, including cases of unforeseen circumstances or policy violations.
+                  <br /><br />
+
+                  Clients are responsible for respecting studio rules, equipment, and staff during sessions.
+                  <br /><br />
+
+                  Continued use of our services indicates your agreement to these terms and any future updates.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </footer >
   )
 }
