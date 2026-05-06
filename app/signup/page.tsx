@@ -15,6 +15,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showModal, setShowModal] = useState(false);
+  const [modal, setModal] = useState<"privacy" | "terms" | null>(null)
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -266,13 +267,23 @@ export default function SignupPage() {
                   />
                   <Label htmlFor="terms" className="text-sm font-normal cursor-pointer leading-relaxed text-muted-foreground">
                     I agree to the{" "}
-                    <Link href="/terms" className="text-[#C8A96A] hover:text-[#B8995A] font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setModal("terms")}
+                      className="text-[#C8A96A] hover:text-[#B8995A] font-medium"
+                    >
                       Terms of Service
-                    </Link>{" "}
-                    and{" "}
-                    <Link href="/privacy" className="text-[#C8A96A] hover:text-[#B8995A] font-medium">
+                    </button>
+
+                    {" "}and{" "}
+
+                    <button
+                      type="button"
+                      onClick={() => setModal("privacy")}
+                      className="text-[#C8A96A] hover:text-[#B8995A] font-medium"
+                    >
                       Privacy Policy
-                    </Link>
+                    </button>
                   </Label>
                 </div>
               </CardContent>
@@ -330,7 +341,75 @@ export default function SignupPage() {
 
           </div>
         </div>
+        
       )}
+      {modal && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+
+    {/* BACKDROP */}
+    <div
+      className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onClick={() => setModal(null)}
+    />
+
+    {/* CONTENT */}
+    <div
+      className="relative w-full max-w-3xl px-6 pb-20 text-center text-white"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* CLOSE */}
+      <button
+        onClick={() => setModal(null)}
+        className="absolute right-6 top-0 text-white/60 hover:text-white text-xl"
+      >
+        ✕
+      </button>
+
+      {modal === "privacy" && (
+        <>
+          <h2 className="text-3xl font-serif mb-6">Privacy Policy</h2>
+          <p className="text-white/80 leading-relaxed">
+            Your privacy matters to us. Studio 21 is committed to protecting the information you share when using our website and booking services.
+            <br /><br />
+
+            We collect only the necessary details required to process your bookings, including your name, contact information, and session preferences. 
+            This information allows us to provide a smooth and personalized experience.
+            <br /><br />
+
+            Your data is handled with care and will never be sold or shared with third parties without your consent, unless required by law or necessary to complete your requested service.
+            <br /><br />
+
+            We implement appropriate security measures to protect your information and ensure it remains confidential.
+            <br /><br />
+
+            By using our platform, you agree to the collection and use of your information in accordance with this policy.
+          </p>
+        </>
+      )}
+
+      {modal === "terms" && (
+        <>
+          <h2 className="text-3xl font-serif mb-6">Terms of Service</h2>
+          <p className="text-white/80 leading-relaxed">
+            By using Studio 21’s services, you agree to provide accurate and complete booking information.
+            <br /><br />
+
+            All bookings are subject to availability and confirmation. Clients are expected to follow agreed schedules to ensure a smooth session.
+            <br /><br />
+
+            Studio 21 reserves the right to manage, reschedule, or cancel bookings when necessary, including cases of unforeseen circumstances or policy violations.
+            <br /><br />
+
+            Clients are responsible for respecting studio rules, equipment, and staff during sessions.
+            <br /><br />
+
+            Continued use of our services indicates your agreement to these terms and any future updates.
+          </p>
+        </>
+      )}
+    </div>
+  </div>
+)}
     </div>
   )
 }
