@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { services, bookings } from "../lib/mock-data"
+import { services, bookings } from "@/lib/mock-data"
 
 export default function UserPage() {
   const userName = "User"

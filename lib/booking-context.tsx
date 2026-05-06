@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useContext, useState, ReactNode } from "react"
+import { createContext, useContext, useEffect, useState, ReactNode } from "react"
+import { supabase } from "@/lib/supabaseClient"
 
 export type ServiceType = "photoshoot" | "makeup" | "studio-rental" | null
 
@@ -44,6 +45,40 @@ interface BookingContextType {
   getPrice: () => number
 }
 
+export const getBookingDraftStorageKey = (userId?: string | null) => {
+  return userId ? `bookingDraft:${userId}` : "bookingDraft:guest"
+}
+
+const normalizeStoredDuration = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const raw = value.trim().toLowerCase()
+    if (raw === "half-day") return 4
+    if (raw === "full-day") return 8
+    if (raw.endsWith("hr")) {
+      const parsed = Number(raw.replace("hr", ""))
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+const readStoredBookingDraft = (userId: string | null) => {
+  if (typeof window === "undefined") return defaultBookingData
+  const raw = localStorage.getItem(getBookingDraftStorageKey(userId))
+  if (!raw) return defaultBookingData
+
+  const parsed = JSON.parse(raw)
+  if (parsed.date) parsed.date = new Date(parsed.date)
+  return {
+    ...defaultBookingData,
+    ...parsed,
+    duration: normalizeStoredDuration(parsed.duration),
+  }
+}
+
 const defaultBookingData: BookingData = {
   service: null,
   shootType: "",
@@ -64,15 +99,55 @@ const BookingContext = createContext<BookingContextType | undefined>(undefined)
 
 export function BookingProvider({ children }: { children: ReactNode }) {
   const [step, setStep] = useState(1)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [bookingData, setBookingData] = useState<BookingData>(defaultBookingData)
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadUserDraft = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!mounted) return
+      const nextUserId = user?.id ?? null
+      setCurrentUserId(nextUserId)
+      setBookingData(readStoredBookingDraft(nextUserId))
+    }
+
+    loadUserDraft()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUserId = session?.user?.id ?? null
+      setCurrentUserId(nextUserId)
+      setBookingData(readStoredBookingDraft(nextUserId))
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   const updateBookingData = (data: Partial<BookingData>) => {
     setBookingData((prev) => ({ ...prev, ...data }))
+    try {
+      const next = { ...bookingData, ...data }
+      const toStore = { ...next, date: next.date ? next.date.toISOString() : null }
+      if (typeof window !== "undefined") {
+        localStorage.setItem(getBookingDraftStorageKey(currentUserId), JSON.stringify(toStore))
+      }
+    } catch (err) {
+      // ignore
+    }
   }
 
   const resetBooking = () => {
     setStep(1)
     setBookingData(defaultBookingData)
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(getBookingDraftStorageKey(currentUserId))
+      }
+    } catch (err) {}
   }
 
   const getPrice = () => {

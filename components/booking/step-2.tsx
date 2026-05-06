@@ -164,6 +164,20 @@ const rentalOptionMap: Record<string, number> = {
 
 export function BookingStep2() {
   const { bookingData, updateBookingData, setStep, getPrice } = useBooking()
+  const [editingBookingId, setEditingBookingId] = useState<number | null>(null)
+
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return
+      const raw = localStorage.getItem("bookingEditMeta")
+      if (!raw) return setEditingBookingId(null)
+
+      const parsed = JSON.parse(raw)
+      setEditingBookingId(parsed?.bookingId ? Number(parsed.bookingId) : null)
+    } catch (err) {
+      setEditingBookingId(null)
+    }
+  }, [])
 
   useEffect(() => {
     if (bookingData.service === "makeup" && !bookingData.duration) {
@@ -212,6 +226,8 @@ const handleNext = () => {
       }
     }
   }
+
+  const isEditing = !!editingBookingId
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-10">
@@ -219,6 +235,11 @@ const handleNext = () => {
         <h1 className="font-serif text-3xl md:text-4xl font-semibold mt-2 mb-3 text-[#1a1a1a]">
           Booking Details
         </h1>
+        {isEditing && (
+          <p className="text-sm text-muted-foreground">
+            Editing an existing booking. You can update the service details here, then continue to date and time.
+          </p>
+        )}
         <p className="text-muted-foreground">
           Customize your session to fit your needs
         </p>
@@ -584,8 +605,8 @@ const handleNext = () => {
           <ArrowLeft className="mr-2 h-5 w-5" />
           Back
         </Button>
-        <Button 
-          size="lg" 
+        <Button
+          size="lg"
           onClick={handleNext}
           disabled={
             bookingData.service === "photoshoot"
@@ -598,7 +619,7 @@ const handleNext = () => {
           }
           className="bg-[#C8A96A] hover:bg-[#B8995A] text-white px-8 h-12"
         >
-          Continue
+            {isEditing ? "Continue to Date & Time" : "Continue"}
           <ArrowRight className="ml-2 h-5 w-5" />
         </Button>
       </div>

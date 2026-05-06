@@ -1,9 +1,11 @@
 "use client"
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useBooking } from "@/lib/booking-context"
+import { supabase } from "@/lib/supabaseClient"
 
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -38,9 +40,37 @@ function isPastDate(date: Date): boolean {
   return date < today
 }
 
+function toNumericDuration(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const raw = value.trim().toLowerCase()
+    if (raw === "half-day") return 4
+    if (raw === "full-day") return 8
+    if (raw.endsWith("hr")) {
+      const parsed = Number(raw.replace("hr", ""))
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
 export function BookingStep3() {
+  const router = useRouter()
   const { bookingData, updateBookingData, setStep } = useBooking()
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [editingBookingId, setEditingBookingId] = useState<number | null>(() => {
+    try {
+      if (typeof window === "undefined") return null
+      const raw = localStorage.getItem("bookingEditMeta")
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      return parsed?.bookingId ? Number(parsed.bookingId) : null
+    } catch (err) {
+      return null
+    }
+  })
   
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -63,14 +93,15 @@ export function BookingStep3() {
 }
 
 useEffect(() => {
-  if (!bookingData.date || !bookingData.duration) {
+  const numericDuration = toNumericDuration(bookingData.duration)
+  if (!bookingData.date || !numericDuration) {
     console.log("⛔ Waiting for date & duration...")
     return
   }
 
   console.log("✅ Fetching with:", {
     date: bookingData.date,
-    duration: bookingData.duration
+    duration: numericDuration
   })
 
   fetchAvailability(bookingData.date)
@@ -81,10 +112,63 @@ useEffect(() => {
     updateBookingData({ time: raw }) // ISO string
   }
 
-  const handleNext = () => {
-    if (bookingData.date && bookingData.time) {
-      setStep(4)
+  const dateToIso = (date: Date | null | undefined) => {
+    if (!date) return ""
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    return localDate.toISOString().split("T")[0]
+  }
+
+  const addHours = (time: string, duration: number) => {
+    const [hour, minute] = time.split(":").map(Number)
+    const newHour = hour + duration
+    return `${String(newHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+  }
+
+  const handleNext = async () => {
+    if (!bookingData.date || !bookingData.time) return
+
+    const editId = editingBookingId ?? (() => {
+      try {
+        if (typeof window === "undefined") return null
+        const raw = localStorage.getItem("bookingEditMeta")
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        return parsed?.bookingId ? Number(parsed.bookingId) : null
+      } catch (err) {
+        return null
+      }
+    })()
+
+    if (editId) {
+      const date = dateToIso(bookingData.date)
+      const time = bookingData.time
+      const duration = bookingData.duration || 1
+
+      const payload: any = {
+        service: bookingData.service,
+        date,
+        time,
+        start_datetime: `${date} ${time}:00`,
+        end_datetime: `${date} ${addHours(time, duration)}:00`,
+      }
+
+      const { error } = await supabase
+        .from("bookings")
+        .update(payload)
+        .eq("id", editId)
+
+      if (error) return alert("Failed to save booking changes")
+
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("bookingEditMeta")
+        localStorage.removeItem("bookingDraft")
+      }
+
+      router.push("/user/schedule")
+      return
     }
+
+    setStep(4)
   }
 
   const isSelectedDate = (day: number) => {
@@ -103,7 +187,7 @@ useEffect(() => {
   try {
     setLoadingSlots(true)
 
-    const duration = bookingData.duration
+    const duration = toNumericDuration(bookingData.duration)
     console.log("duration:", duration)
 
     // FIX HERE
@@ -128,6 +212,9 @@ useEffect(() => {
 
     const res = await fetch("/api/availability", {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         date: localDate, // use this instead
         duration
@@ -135,12 +222,15 @@ useEffect(() => {
     })
 
     const data = await res.json()
-    console.log("🎯 API RESPONSE:", data.slots)
+    if (!res.ok || !Array.isArray(data?.slots)) {
+      setTimeSlots([])
+      return
+    }
 
     const formatted = data.slots.map((slot: string) => {
       const start = new Date(`1970-01-01T${slot}:00`)
 
-      const end = new Date(start.getTime() + bookingData.duration * 60 * 60 * 1000)
+      const end = new Date(start.getTime() + duration * 60 * 60 * 1000)
 
       const formatTime = (d: Date) =>
         d.toLocaleTimeString([], {
@@ -343,7 +433,7 @@ useEffect(() => {
           disabled={!bookingData.date || !bookingData.time}
           className="bg-[#C8A96A] hover:bg-[#B8995A] text-white px-8 h-12"
         >
-          Continue
+          {editingBookingId ? "Save changes" : "Continue"}
           <ArrowRight className="ml-2 h-5 w-5" />
         </Button>
       </div>

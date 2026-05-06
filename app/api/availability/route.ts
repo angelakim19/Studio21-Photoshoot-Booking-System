@@ -16,12 +16,17 @@ function getBusinessHours(date: string) {
 
 export async function POST(req: Request) {
   const { date, duration } = await req.json()
+  const normalizedDuration = Number(duration)
+
+  if (!date || !Number.isFinite(normalizedDuration) || normalizedDuration <= 0) {
+    return NextResponse.json({ slots: [] }, { status: 400 })
+  }
 
   const { start: startHour, end: endHour } = getBusinessHours(date)
 
   const slots: string[] = []
 
-  for (let hour = startHour; hour <= endHour - duration; hour++) {
+  for (let hour = startHour; hour <= endHour - normalizedDuration; hour++) {
     const time = `${hour.toString().padStart(2, "0")}:00`
     slots.push(time)
   }
@@ -36,23 +41,23 @@ export async function POST(req: Request) {
     .select("start_datetime, end_datetime, status")
     .eq("status", "approved")
 
-    console.log("📦 BOOKINGS:", bookings)
-    const bookingsList = (bookings || []).filter((booking) => {
-      return booking.start_datetime.startsWith(date)
-    })
+  const bookingsList = (bookings || []).filter((booking) => {
+    if (!booking?.start_datetime || !booking?.end_datetime) return false
+    return booking.start_datetime.startsWith(date)
+  })
 
-  console.log("📅 FILTERED BOOKINGS:", bookingsList)
   function timeToMinutes(time: string) {
     const [hour, minute] = time.split(":").map(Number)
     return hour * 60 + minute
   }
   const availableSlots = slots.filter((slot) => {
     const slotStart = timeToMinutes(slot)
-    const slotEnd = slotStart + duration * 60
+    const slotEnd = slotStart + normalizedDuration * 60
 
     return !bookingsList.some((booking) => {
-      const bookingStartTime = booking.start_datetime.split(" ")[1]
-      const bookingEndTime = booking.end_datetime.split(" ")[1]
+      const bookingStartTime = booking.start_datetime.split(" ")[1]?.slice(0, 5)
+      const bookingEndTime = booking.end_datetime.split(" ")[1]?.slice(0, 5)
+      if (!bookingStartTime || !bookingEndTime) return false
 
       const bookingStart = timeToMinutes(bookingStartTime)
       const bookingEnd = timeToMinutes(bookingEndTime)

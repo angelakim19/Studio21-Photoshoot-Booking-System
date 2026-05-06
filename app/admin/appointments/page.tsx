@@ -22,6 +22,10 @@ type Appointment = {
   duration: number
   service: string        // display label shown in table
   serviceSlug: string    // slug stored in package_name_snapshot, used to pre-fill dialog
+  serviceId?: number | null
+  packageId?: number | null
+  makeupServiceId?: number | null
+  studioRentalOptionId?: number | null
   addons: { photographer: boolean; makeup: boolean }
   makeupPeople: number
   studioHours: number
@@ -52,6 +56,70 @@ const getEndTime = (time: string, duration: number) => {
   d.setHours(h)
   d.setMinutes(m + duration)
   return d.toTimeString().slice(0, 5)
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  studio_rental: "Studio Rental",
+  pkg_a: "Package A - Indoor Set Design",
+  pkg_b: "Package B - Plain Background",
+  pkg_c: "Package C - Outdoor Shoot",
+  photoshoot: "Photoshoot",
+  makeup: "Makeup",
+  "studio-rental": "Studio Rental",
+  "Package A — Indoor Set Design": "Package A - Indoor Set Design",
+  "Package B — Plain Background": "Package B - Plain Background",
+  "Package C — Outdoor Shoot": "Package C - Outdoor Shoot",
+  "Package A â€” Indoor Set Design": "Package A - Indoor Set Design",
+  "Package B â€” Plain Background": "Package B - Plain Background",
+  "Package C â€” Outdoor Shoot": "Package C - Outdoor Shoot",
+}
+
+const PACKAGE_LABELS: Record<number, string> = {
+  1: "Package A - Indoor Set Design",
+  2: "Package B - Plain Background",
+  3: "Package C - Outdoor Shoot",
+}
+
+const getServiceTypeLabel = (serviceId: number | string | null | undefined) => {
+  const id = Number(serviceId)
+  if (id === 1) return "Photoshoot"
+  if (id === 2) return "Makeup"
+  if (id === 3) return "Studio Rental"
+  return ""
+}
+
+const getBookingServiceLabel = (row: any) => {
+  const snapshot = row.package_name_snapshot
+  if (snapshot) return SERVICE_LABELS[snapshot] || snapshot
+
+  if (row.package_id) return PACKAGE_LABELS[Number(row.package_id)] || "Photoshoot"
+  if (row.makeup_service_id) return "Makeup"
+  if (row.studio_rental_option_id) return "Studio Rental"
+
+  const rawService = row.service
+  if (rawService) return SERVICE_LABELS[rawService] || rawService
+
+  return getServiceTypeLabel(row.service_id) || "—"
+}
+
+const getBookingServiceSlug = (row: any) => {
+  const snapshot = row.package_name_snapshot
+  if (snapshot) return snapshot
+
+  if (row.package_id) {
+    const packageIdToSlug: Record<number, string> = {
+      1: "pkg_a",
+      2: "pkg_b",
+      3: "pkg_c",
+    }
+    return packageIdToSlug[Number(row.package_id)] || "photoshoot"
+  }
+
+  if (Number(row.service_id) === 3 || row.studio_rental_option_id) return "studio_rental"
+  if (Number(row.service_id) === 2 || row.makeup_service_id) return "makeup"
+  if (Number(row.service_id) === 1) return "photoshoot"
+
+  return row.service || ""
 }
 
 // ─── Meta encoding/decoding ───────────────────────────────────────────────────
@@ -142,14 +210,43 @@ function mapRow(row: any): Appointment {
 
   // package_name_snapshot stores the service slug
   // Slugs: "studio_rental" | "pkg_a" | "pkg_b" | "pkg_c"
-  const serviceSlug  = row.package_name_snapshot ?? ""
+  const serviceSlug = getBookingServiceSlug(row)
+
   const SERVICE_LABELS: Record<string, string> = {
+    // admin slugs
     studio_rental: "Studio Rental",
-    pkg_a:         "Package A – Indoor Set Design",
-    pkg_b:         "Package B – Plain Background",
-    pkg_c:         "Package C – Outdoor Shoot",
+    pkg_a: "Package A – Indoor Set Design",
+    pkg_b: "Package B – Plain Background",
+    pkg_c: "Package C – Outdoor Shoot",
+
+    // user-side labels
+    "Package A — Indoor Set Design": "Package A – Indoor Set Design",
+    "Package B — Plain Background": "Package B – Plain Background",
+    "Package C — Outdoor Shoot": "Package C – Outdoor Shoot",
+
+    // makeup
+    "Natural/Everyday Look": "Natural/Everyday Look",
+    "Glamour/Evening": "Glamour/Evening",
+    "Bridal Makeup": "Bridal Makeup",
+
+    // studio rental packages
+    "1 Hour — Basic Setup": "1 Hour — Basic Setup",
+    "1 Hour — With Backdrop": "1 Hour — With Backdrop",
+
+    "2 Hours — Basic Setup": "2 Hours — Basic Setup",
+    "2 Hours — With Backdrop": "2 Hours — With Backdrop",
+
+    "3 Hours — Basic Setup": "3 Hours — Basic Setup",
+    "3 Hours — With Backdrop": "3 Hours — With Backdrop",
+
+    "Half Day (4 hrs) — With Backdrop":
+      "Half Day (4 hrs) — With Backdrop",
+
+    "Full Day (8 hrs) — With Backdrop":
+      "Full Day (8 hrs) — With Backdrop",
   }
-  const serviceLabel = SERVICE_LABELS[serviceSlug] ?? serviceSlug ?? "—"
+
+  const serviceLabel = SERVICE_LABELS[serviceSlug] || getBookingServiceLabel(row)
 
   return {
     id: row.id,
@@ -163,6 +260,10 @@ function mapRow(row: any): Appointment {
     duration,
     service:       serviceLabel,
     serviceSlug,
+    serviceId:      row.service_id ?? null,
+    packageId:      row.package_id ?? null,
+    makeupServiceId: row.makeup_service_id ?? null,
+    studioRentalOptionId: row.studio_rental_option_id ?? null,
     addons:        { photographer: meta.photographer, makeup: meta.makeup },
     makeupPeople:  meta.makeupPeople,
     studioHours:   meta.studioHours,
@@ -186,6 +287,10 @@ async function fetchBookings(): Promise<Appointment[]> {
       total_price,
       start_datetime,
       end_datetime,
+      service_id,
+      package_id,
+      makeup_service_id,
+      studio_rental_option_id,
       package_name_snapshot,
       notes,
       users ( first_name, last_name, email, phone ),
@@ -211,7 +316,37 @@ async function updateStatusInDb(id: number, status: Status) {
   if (error) console.error("updateStatus:", error.message)
 }
 
-async function deleteBookingFromDb(id: number) {
+async function deleteBookingFromDb(id: number): Promise<boolean> {
+  const deleteDirectly = async () => {
+    const { error: paymentsError } = await supabase.from("payments").delete().eq("booking_id", id)
+    if (paymentsError) {
+      console.error("deleteBooking payments:", paymentsError.message)
+      return false
+    }
+
+    const { error: addonsError } = await supabase.from("booking_addons").delete().eq("booking_id", id)
+    if (addonsError) {
+      console.error("deleteBooking addons:", addonsError.message)
+      return false
+    }
+
+    const { error: bookingError } = await supabase.from("bookings").delete().eq("id", id)
+    if (bookingError) {
+      console.error("deleteBooking booking:", bookingError.message)
+      return false
+    }
+    const { data: verifyRow, error: verifyError } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("id", id)
+      .maybeSingle()
+    if (verifyError || verifyRow) {
+      console.error("deleteBooking verify (direct):", verifyError?.message || "row still exists")
+      return false
+    }
+    return true
+  }
+
   // Remove Google Calendar event if one exists
   await fetch("/api/calendar/sync", {
     method: "POST",
@@ -219,10 +354,42 @@ async function deleteBookingFromDb(id: number) {
     body: JSON.stringify({ bookingId: id, action: "delete" }),
   }).catch(() => {}) // non-fatal if calendar API fails
 
-  await supabase.from("payments").delete().eq("booking_id", id)
-  await supabase.from("booking_addons").delete().eq("booking_id", id)
-  const { error } = await supabase.from("bookings").delete().eq("id", id)
-  if (error) console.error("deleteBooking:", error.message)
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const accessToken = session?.access_token
+  if (!accessToken) {
+    console.warn("deleteBooking: missing access token, using direct delete fallback")
+    return await deleteDirectly()
+  }
+
+  const res = await fetch("/api/bookings/delete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ bookingId: id }),
+  })
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    console.error("deleteBooking API:", data?.error || `HTTP ${res.status}`)
+    return await deleteDirectly()
+  }
+
+  // Verify API delete actually removed row from DB
+  const { data: verifyRow, error: verifyError } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle()
+  if (verifyError || verifyRow) {
+    console.error("deleteBooking verify (api):", verifyError?.message || "row still exists")
+    return await deleteDirectly()
+  }
+
+  return true
 }
 
 // ─── Relational table helpers ─────────────────────────────────────────────────
@@ -853,7 +1020,40 @@ export default function AppointmentsPage() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { loadAppointments() }, [loadAppointments])
+  useEffect(() => {
+    let channel: any
+
+    const setupRealtime = async () => {
+      await loadAppointments()
+
+      try {
+        channel = supabase
+          .channel(`public:bookings:admin:${Date.now()}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "bookings",
+            },
+            async () => {
+              await loadAppointments()
+            }
+          )
+          .subscribe()
+      } catch (err) {
+        console.warn("Realtime subscription error", err)
+      }
+    }
+
+    setupRealtime()
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [loadAppointments])
 
   const { search, setSearch, sortBy, setSortBy, statusFilter, setStatusFilter, data } =
     useAppointments(appointments)
@@ -909,8 +1109,15 @@ export default function AppointmentsPage() {
   }
 
   const handleDelete = async (id: number) => {
+    const previous = appointments
     setAppointments((prev) => prev.filter((a) => a.id !== id))
-    await deleteBookingFromDb(id)
+    const ok = await deleteBookingFromDb(id)
+    if (!ok) {
+      setAppointments(previous)
+      alert("Failed to delete booking in database. Nothing was removed.")
+      return
+    }
+    await loadAppointments()
   }
 
   const handleStatusChange = async (id: number, status: Status) => {
