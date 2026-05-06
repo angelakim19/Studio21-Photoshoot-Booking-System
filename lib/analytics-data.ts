@@ -8,18 +8,14 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 export async function getAnalyticsData() {
   const currentYear = new Date().getFullYear()
 
-  // ---------------------------------------------------------------
-  // Fire all independent queries in parallel with Promise.all
-  // This cuts load time from ~8 sequential round trips to ~2
-  // ---------------------------------------------------------------
   const [
-    { count: totalBookings,  error: bookingsCountError },
-    { data: clientRows,      error: clientsError       },
-    { data: paidPayments,    error: revenueError       },
-    { data: bookingServices, error: popularError       },
-    { data: monthlyPayments, error: monthlyError       },
-    { data: allBookingDates, error: weeklyError        },
-    { data: breakdownRows,   error: breakdownError     },
+    { count: totalBookings,    error: bookingsCountError },
+    { data: clientRows,        error: clientsError       },
+    { data: approvedBookings,  error: revenueError       },
+    { data: bookingServices,   error: popularError       },
+    { data: monthlyBookings,   error: monthlyError       },
+    { data: allBookingDates,   error: weeklyError        },
+    { data: breakdownRows,     error: breakdownError     },
   ] = await Promise.all([
 
     // 1. Total Bookings count
@@ -27,39 +23,43 @@ export async function getAnalyticsData() {
       .from("bookings")
       .select("*", { count: "exact", head: true }),
 
-    // 2. All user_ids for distinct client count
+    // 2. Distinct clients — query users table directly with role=client
+    supabaseServer
+      .from("users")
+      .select("id")
+      .eq("role", "client"),
+
+    // 3. Approved bookings total_price for total revenue
     supabaseServer
       .from("bookings")
-      .select("user_id"),
-
-    // 3. Paid payments for total revenue
-    supabaseServer
-      .from("payments")
-      .select("amount")
-      .eq("status", "paid"),
+      .select("total_price")
+      .eq("status", "approved"),
 
     // 4. All service_ids for popular service calculation
     supabaseServer
       .from("bookings")
-      .select("service_id"),
+      .select("service_id")
+      .not("service_id", "is", null),
 
-    // 5. Paid payments for monthly revenue chart
-    supabaseServer
-      .from("payments")
-      .select("amount, created_at")
-      .eq("status", "paid")
-      .gte("created_at", `${currentYear}-01-01`)
-      .lte("created_at", `${currentYear}-12-31`),
-
-    // 6. Booking dates for weekly bookings chart
+    // 5. Approved bookings for monthly revenue chart
     supabaseServer
       .from("bookings")
-      .select("start_datetime"),
+      .select("total_price, start_datetime")
+      .eq("status", "approved")
+      .gte("start_datetime", `${currentYear}-01-01`)
+      .lte("start_datetime", `${currentYear}-12-31`),
 
-    // 7. Service breakdown with FK join
+    // 6. Booking start_datetimes for weekly chart
     supabaseServer
       .from("bookings")
-      .select("service_id, services(name)"),
+      .select("start_datetime")
+      .not("start_datetime", "is", null),
+
+    // 7. Service breakdown with FK join — only rows with a valid service
+    supabaseServer
+      .from("bookings")
+      .select("service_id, services(name)")
+      .not("service_id", "is", null),
   ])
 
   // Log any errors
@@ -72,23 +72,19 @@ export async function getAnalyticsData() {
   if (breakdownError)     console.error("Error fetching service breakdown:", breakdownError)
 
   // -------------------------
-  // 2. Total Clients
+  // 2. Total Clients — count directly from users table
   // -------------------------
-  const totalClients = clientRows
-    ? new Set(clientRows.map((r) => r.user_id)).size
-    : 0
+  const totalClients = clientRows?.length ?? 0
 
   // -------------------------
   // 3. Total Revenue
   // -------------------------
-  const totalRevenue = paidPayments
-    ? paidPayments.reduce((sum, row) => sum + (row.amount ?? 0), 0)
+  const totalRevenue = approvedBookings
+    ? approvedBookings.reduce((sum, row) => sum + Number(row.total_price ?? 0), 0)
     : 0
 
   // -------------------------
   // 4. Popular Service
-  // Only this one needs a follow-up query (to resolve the name),
-  // but it's a single lookup — not a chain.
   // -------------------------
   let popularService = "N/A"
 
@@ -120,10 +116,10 @@ export async function getAnalyticsData() {
   const revenueByMonth: Record<number, number> = {}
   for (let i = 0; i < 12; i++) revenueByMonth[i] = 0
 
-  if (monthlyPayments) {
-    for (const row of monthlyPayments) {
-      const month = new Date(row.created_at).getMonth()
-      revenueByMonth[month] += row.amount ?? 0
+  if (monthlyBookings) {
+    for (const row of monthlyBookings) {
+      const month = new Date(row.start_datetime).getMonth()
+      revenueByMonth[month] += Number(row.total_price ?? 0)
     }
   }
 
@@ -133,46 +129,33 @@ export async function getAnalyticsData() {
   }))
 
   // -------------------------
-  // 6. Weekly Bookings chart data
+  // 6. Weekly Bookings — simple raw count per day of week
   // -------------------------
   const dayCount: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }
-  const dayWeekSet: Record<number, Set<string>> = {
-    0: new Set(), 1: new Set(), 2: new Set(),
-    3: new Set(), 4: new Set(), 5: new Set(), 6: new Set(),
-  }
 
   if (allBookingDates) {
     for (const row of allBookingDates) {
       if (!row.start_datetime) continue
-      const date = new Date(row.start_datetime)
-      const dow = date.getDay()
-      const year = date.getFullYear()
-      const startOfYear = new Date(year, 0, 1)
-      const weekNo = Math.ceil(
-        ((date.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7
-      )
+      const dow = new Date(row.start_datetime).getDay() // 0=Sun, 6=Sat
       dayCount[dow] += 1
-      dayWeekSet[dow].add(`${year}-W${weekNo}`)
     }
   }
 
-  const weeklyBookings = DAY_LABELS.map((day, i) => {
-    const dow = i === 0 ? 0 : i
-    const weeks = dayWeekSet[dow].size || 1
-    return {
-      day,
-      bookings: Math.round((dayCount[dow] / weeks) * 10) / 10,
-    }
-  })
+  // DAY_LABELS index matches dow (0=Sun ... 6=Sat)
+  const weeklyBookings = DAY_LABELS.map((day, dow) => ({
+    day,
+    bookings: dayCount[dow],
+  }))
 
   // -------------------------
-  // 7. Service Breakdown chart data
+  // 7. Service Breakdown
   // -------------------------
   const serviceBookingCount: Record<string, number> = {}
 
   if (breakdownRows) {
     for (const row of breakdownRows) {
-      const name = (row.services as any)?.name ?? "Unknown"
+      const name = (row.services as any)?.name
+      if (!name) continue // skip rows where FK join returned null
       serviceBookingCount[name] = (serviceBookingCount[name] ?? 0) + 1
     }
   }
@@ -187,9 +170,6 @@ export async function getAnalyticsData() {
     }))
     .sort((a, b) => b.value - a.value)
 
-  // -------------------------
-  // Return
-  // -------------------------
   return {
     stats: {
       totalBookings: totalBookings ?? 0,

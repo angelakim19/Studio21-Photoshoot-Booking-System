@@ -199,13 +199,13 @@ export default function AdminDashboardPage() {
 
     const { data: bookingData } = await supabase
       .from("bookings")
-      .select("total_price")
+      .select("total_price, status")
       .gte("start_datetime", `${start}T00:00:00`)
       .lte("start_datetime", `${end}T23:59:59`)
       .neq("status", "cancelled")
 
     const monthlyBookings = bookingData?.length ?? 0
-    const monthlyRevenue  = bookingData?.reduce((s, b) => s + (b.total_price ?? 0), 0) ?? 0
+    const monthlyRevenue  = bookingData?.filter(b => b.status === "approved").reduce((s, b) => s + (b.total_price ?? 0), 0) ?? 0
 
     const { count } = await supabase
       .from("users")
