@@ -984,7 +984,8 @@ export default function AppointmentsPage() {
     <div className="space-y-6 p-6">
       <div className="flex flex-col sm:flex-row justify-between gap-3 items-start sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold">Appointments</h1>
+          <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Management</p>
+          <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Appointments</h1>
           <p className="text-sm text-gray-500 mt-0.5">{counts.all} total appointments</p>
         </div>
         {isAdmin && (

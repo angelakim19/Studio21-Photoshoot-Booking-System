@@ -300,6 +300,10 @@ export default function AdminDashboardPage() {
         {/* ── Left: Stats + Calendar ───────────────────────────────── */}
         <div className="flex-1 p-6 md:p-10 overflow-y-auto">
 
+          <div className="text-[#1a1a1a] mb-8 px-1 md:px-2">
+            <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Admin</p>
+            <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Calendar</h1>
+          </div>
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
 

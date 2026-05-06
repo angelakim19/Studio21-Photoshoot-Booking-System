@@ -283,7 +283,8 @@ export default function ClientsPage() {
       {/* Header + Add Button */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold">Clients</h1>
+          <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Management</p>
+          <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Clients</h1>
           <p className="text-sm text-gray-500 mt-1">
             {clients.length} total clients
           </p>
