@@ -57,7 +57,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
 
-  // 🔹 Selection state
+  // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   // Dialog state 
@@ -87,7 +87,7 @@ export default function ClientsPage() {
     })
   }
 
-  // 🔹 Fetch clients (role = client)
+  // Fetch clients (role = client)
   const loadClients = useCallback(async () => {
     setLoading(true)
 
@@ -110,7 +110,7 @@ export default function ClientsPage() {
     loadClients()
   }, [loadClients])
 
-  // 🔹 Hook usage
+  // Hook usage
   const { search, setSearch, sortBy, setSortBy, data } =
     useClients(clients)
 
@@ -178,13 +178,6 @@ export default function ClientsPage() {
       phone,
       role: "client",
     })
-
-    /* if (error) {
-      alert(error.message.includes("duplicate")
-        ? "Email already exists."
-        : "Failed to add client.")
-      return
-    } */
 
     console.log("Supabase response:", { data, error })
 
