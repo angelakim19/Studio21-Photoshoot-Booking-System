@@ -6,7 +6,18 @@ import { Pencil, Trash2 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { normalizeBookingStatus } from "@/lib/booking-status"
+
+type BookingUiStatus = "approved" | "pending" | "cancelled"
+
+const normalizeBookingStatus = (raw: string | null | undefined): BookingUiStatus => {
+  const value = (raw || "").toLowerCase().trim()
+  if (value === "approved" || value === "confirmed") return "approved"
+  if (value === "cancelled") return "cancelled"
+  return "pending"
+}
+
+const toIsoDate = (date: Date) =>
+  new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().split("T")[0]
 
 export default function SchedulePage() {
   const [bookings, setBookings] = useState<any[]>([])
@@ -63,6 +74,13 @@ export default function SchedulePage() {
     return null
   }
 
+  const addHoursToTime = (time: string, durationHours: number) => {
+    if (!time || !durationHours) return ""
+    const [hour, minute] = time.split(":").map(Number)
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return ""
+    return `${String(hour + durationHours).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+  }
+
   const buildTimeOptions = (dateIso: string, durationHours: number) => {
     const { start, end } = getBusinessHours(dateIso)
     const options: Array<{ value: string; label: string }> = []
@@ -108,6 +126,23 @@ export default function SchedulePage() {
     photoshoot: "Photoshoot",
     makeup: "Makeup",
     "studio-rental": "Studio Rental",
+    "package a — indoor set design": "Package A - Indoor Set Design",
+    "package b — plain background": "Package B - Plain Background",
+    "package c — outdoor shoot": "Package C - Outdoor Shoot",
+    "package a â€” indoor set design": "Package A - Indoor Set Design",
+    "package b â€” plain background": "Package B - Plain Background",
+    "package c â€” outdoor shoot": "Package C - Outdoor Shoot",
+    "1 hour — basic setup": "1 Hour - Basic Setup",
+    "1 hour — with backdrop": "1 Hour - With Backdrop",
+    "2 hours — basic setup": "2 Hours - Basic Setup",
+    "2 hours — with backdrop": "2 Hours - With Backdrop",
+    "3 hours — basic setup": "3 Hours - Basic Setup",
+    "3 hours — with backdrop": "3 Hours - With Backdrop",
+    "half day (4 hrs) — with backdrop": "Half Day (4 hrs) - With Backdrop",
+    "full day (8 hrs) — with backdrop": "Full Day (8 hrs) - With Backdrop",
+    "natural/everyday look": "Natural/Everyday Look",
+    "glamour/evening": "Glamour/Evening",
+    "bridal makeup": "Bridal Makeup",
   }
 
   const packageLabels: Record<number, string> = {
@@ -144,11 +179,21 @@ export default function SchedulePage() {
     return exact?.value || available[0]?.value || raw || ""
   }
 
+  const normalizeServiceLabel = (value: string) => {
+    const key = value.toLowerCase().trim()
+    return serviceLabels[key] || serviceLabels[value] || value
+  }
+
   const getDisplayService = (booking: any) => {
-    return booking?.package_name_snapshot || booking?.service || "—"
+    const snapshot = booking?.package_name_snapshot
+    if (snapshot) return normalizeServiceLabel(snapshot)
+    return booking?.service ? normalizeServiceLabel(String(booking.service)) : "—"
   }
 
   const getSyncedDisplayService = (booking: any) => {
+    const snapshot = booking?.package_name_snapshot
+    if (snapshot) return normalizeServiceLabel(snapshot)
+
     if (booking?.package_id) return packageLabels[Number(booking.package_id)] || "Photoshoot"
     if (booking?.makeup_service_id) return "Makeup"
     if (booking?.studio_rental_option_id) return "Studio Rental"
@@ -157,9 +202,6 @@ export default function SchedulePage() {
     if (serviceId === 1) return "Photoshoot"
     if (serviceId === 2) return "Makeup"
     if (serviceId === 3) return "Studio Rental"
-
-    const snapshot = booking?.package_name_snapshot
-    if (snapshot) return serviceLabels[snapshot] || snapshot
 
     return getDisplayService(booking)
   }
@@ -208,8 +250,6 @@ export default function SchedulePage() {
         return `${fmt(start)} - ${fmt(end)}`
       }
     }
-
-    // fallback: show just start time if that’s all we can parse
     return getDisplayDateTime(booking).time
   }
 
@@ -283,24 +323,83 @@ export default function SchedulePage() {
 
   const toTimePart = (raw: any) => {
     if (!raw || typeof raw !== "string") return ""
-    const parts = raw.split(" ")
-    const timePart = parts[1] || ""
-    if (/^\d{2}:\d{2}/.test(timePart)) return timePart.slice(0, 5)
-    return ""
+    const match = raw.match(/(\d{2}:\d{2})/)
+    return match?.[1] || ""
   }
 
-  const buildHourlyTimeOptions = (dateIso: string) => {
-    const { start, end } = getBusinessHours(dateIso)
-    const options: Array<{ value: string; label: string }> = []
-    for (let hour = start; hour <= end; hour++) {
-      const value = `${String(hour).padStart(2, "0")}:00`
-      options.push({ value, label: formatTimeLabel(value) })
+  const getEditDurationHours = () => {
+    if (!editingBooking) return 1
+    if (editDraft.serviceType === "studio-rental") {
+      return parseDurationHoursFromServiceLabel(editDraft.service) || toHourDuration(editingBooking)
     }
-    return options
+    return toHourDuration(editingBooking)
+  }
+
+  const [blockedDates, setBlockedDates] = useState<string[]>([])
+  const [availableStartSlots, setAvailableStartSlots] = useState<Array<{ value: string; label: string }>>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [currentSlotUnavailable, setCurrentSlotUnavailable] = useState(false)
+  const [unavailableSelectionModal, setUnavailableSelectionModal] = useState({
+    open: false,
+    message: "",
+  })
+
+  const fetchBlockedDates = async () => {
+    try {
+      const res = await fetch("/api/availability/blocked-dates")
+      const data = await res.json()
+      setBlockedDates(Array.isArray(data) ? data : [])
+    } catch {
+      setBlockedDates([])
+    }
+  }
+
+  const fetchAvailableSlots = async (dateIso: string, durationHours: number) => {
+    if (!dateIso || !durationHours) {
+      setAvailableStartSlots([])
+      setCurrentSlotUnavailable(false)
+      return
+    }
+    setLoadingSlots(true)
+    try {
+      const res = await fetch("/api/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: dateIso, duration: durationHours }),
+      })
+      const data = await res.json()
+      if (!res.ok || !Array.isArray(data?.slots)) {
+        setAvailableStartSlots([])
+        setCurrentSlotUnavailable(false)
+        return
+      }
+      const apiSlots: string[] = data.slots
+      const options = data.slots.map((slot: string) => ({
+        value: slot,
+        label: `${formatTimeLabel(slot)} - ${formatTimeLabel(addHoursToTime(slot, durationHours))}`,
+      }))
+
+      // Keep current booking slot visible while editing this booking.
+      const currentStart = toTimePart(editingBooking?.start_datetime)
+      setCurrentSlotUnavailable(!!currentStart && !apiSlots.includes(currentStart))
+      if (currentStart && !options.some((o: { value: string }) => o.value === currentStart)) {
+        options.unshift({
+          value: currentStart,
+          label: `${formatTimeLabel(currentStart)} - ${formatTimeLabel(addHoursToTime(currentStart, durationHours))} (current)`,
+        })
+      }
+      setAvailableStartSlots(options)
+    } catch {
+      setAvailableStartSlots([])
+      setCurrentSlotUnavailable(false)
+    } finally {
+      setLoadingSlots(false)
+    }
   }
 
   useEffect(() => {
     let channel: any
+    let refreshTimer: number | undefined
 
     const setup = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -325,6 +424,9 @@ export default function SchedulePage() {
     }
 
     setup()
+    refreshTimer = window.setInterval(() => {
+      void load()
+    }, 5000)
 
     const refreshOnFocus = () => {
       if (document.visibilityState !== "hidden") {
@@ -336,27 +438,48 @@ export default function SchedulePage() {
     document.addEventListener("visibilitychange", refreshOnFocus)
 
     return () => {
+      if (refreshTimer) window.clearInterval(refreshTimer)
       window.removeEventListener("focus", refreshOnFocus)
       document.removeEventListener("visibilitychange", refreshOnFocus)
       if (channel) supabase.removeChannel(channel)
     }
   }, [])
 
+  useEffect(() => {
+    void fetchBlockedDates()
+  }, [])
+
   const startEdit = (booking: any) => {
     const serviceType = normalizeServiceValue(booking)
     setEditingBooking({ ...booking, __draft: false })
     setEditStep(1)
+    const initialStart = toTimePart(booking.start_datetime)
+    const initialEnd = toTimePart(booking.end_datetime)
     setEditDraft({
       serviceType,
       service: getServiceDetail(booking, serviceType),
       date: toDateInput(booking.start_datetime),
-      startTime: toTimePart(booking.start_datetime),
-      endTime: toTimePart(booking.end_datetime),
+      startTime: initialStart,
+      endTime: initialEnd,
     })
   }
 
+  useEffect(() => {
+    if (!editingBooking || editStep !== 2 || !editDraft.date) return
+    const durationHours = getEditDurationHours()
+    if (!durationHours) return
+    void fetchAvailableSlots(editDraft.date, durationHours)
+  }, [editingBooking, editStep, editDraft.date, editDraft.service, editDraft.serviceType])
+
   const saveEdit = async () => {
     if (!editingBooking) return
+    if (currentSlotUnavailable) {
+      setUnavailableSelectionModal({
+        open: true,
+        message: "This time slot is unavailable. Please select another available start time.",
+      })
+      return
+    }
     if (!editDraft.date || !editDraft.startTime || !editDraft.endTime) {
       return alert("Please select date, start time, and end time.")
     }
@@ -402,27 +525,51 @@ export default function SchedulePage() {
       payload.studio_rental_option_id = editingBooking.studio_rental_option_id ?? 1
     }
 
-    const { error } = await supabase
-      .from("bookings")
-      .update(payload)
-      .eq("id", editingBooking.id)
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
+    if (!accessToken) return alert("You must be logged in")
 
-    if (error) return alert(`Failed to save booking changes: ${error.message}`)
+    const res = await fetch("/api/bookings/update", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        bookingId: editingBooking.id,
+        updates: payload,
+      }),
+    })
+
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      return alert(`Failed to save booking changes: ${json?.error || "Unknown error"}`)
+    }
+
+    const updatedRow = json?.booking ?? null
 
     setBookings((prev) =>
       prev.map((item) =>
-        item.id === editingBooking.id
-          ? {
+        String(item.id) === String(editingBooking.id)
+          ? (updatedRow || {
               ...item,
               ...payload,
-              package_name_snapshot: editDraft.service,
-            }
+              service_id: payload.service_id ?? item.service_id,
+              package_id: payload.package_id ?? null,
+              makeup_service_id: payload.makeup_service_id ?? null,
+              studio_rental_option_id: payload.studio_rental_option_id ?? null,
+            })
           : item
       )
     )
     setEditingBooking(null)
     setEditStep(1)
-    await load()
+    // Ensure UI is synced even when realtime delivery is delayed.
+    setTimeout(() => {
+      void load()
+    }, 250)
   }
 
   const handleDelete = async () => {
@@ -487,6 +634,11 @@ export default function SchedulePage() {
 
           <div className="mb-5 rounded-2xl border border-[#ece4d7] bg-[#fbf7f1] p-4 md:p-5">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#8f7a53]">Current booking details</p>
+            {currentSlotUnavailable && editStep === 2 && (
+              <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                The current time slot is no longer available for this updated service or duration. Please select a new available start time.
+              </p>
+            )}
             <div className="grid gap-3 md:grid-cols-5">
               <div>
                 <p className="text-xs uppercase tracking-[0.1em] text-gray-500">Date</p>
@@ -585,62 +737,71 @@ export default function SchedulePage() {
                   <input
                     type="date"
                     value={editDraft.date}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const nextDate = e.target.value
+                      if (nextDate && blockedDates.includes(nextDate)) {
+                        setUnavailableSelectionModal({
+                          open: true,
+                          message: "This date is unavailable. Please choose another date.",
+                        })
+                        return
+                      }
                       setEditDraft({
                         ...editDraft,
-                        date: e.target.value,
+                        date: nextDate,
                         startTime: "",
                         endTime: "",
                       })
-                    }
+                    }}
+                    min={toIsoDate(new Date())}
                     className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none focus:border-[#C8A96A]"
                   />
+                  {editDraft.date && blockedDates.includes(editDraft.date) && (
+                    <p className="text-xs text-red-500">This date is blocked and unavailable.</p>
+                  )}
                 </div>
                 <div className="grid min-w-0 gap-2">
                   <label className="text-sm font-medium text-[#1a1a1a]">Start Time</label>
                   <select
                     value={editDraft.startTime}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const nextStart = e.target.value
+                      const originalStart = toTimePart(editingBooking?.start_datetime)
+                      if (currentSlotUnavailable && nextStart === originalStart) {
+                        setUnavailableSelectionModal({
+                          open: true,
+                          message: "This time slot is unavailable. Please choose another available start time.",
+                        })
+                        setEditDraft({
+                          ...editDraft,
+                          startTime: "",
+                          endTime: "",
+                        })
+                        return
+                      }
                       setEditDraft({
                         ...editDraft,
-                        startTime: e.target.value,
-                        endTime: "",
+                        startTime: nextStart,
+                        endTime: addHoursToTime(nextStart, getEditDurationHours()),
                       })
-                    }
+                    }}
                     className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none focus:border-[#C8A96A]"
-                    disabled={!editDraft.date}
+                    disabled={!editDraft.date || blockedDates.includes(editDraft.date) || loadingSlots}
                   >
-                    <option value="">Select start time</option>
-                    {buildHourlyTimeOptions(editDraft.date).map((option) => (
+                    <option value="">{loadingSlots ? "Loading available times..." : "Select start time"}</option>
+                    {availableStartSlots.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
                   </select>
+                  {currentSlotUnavailable && (
+                    <p className="text-xs text-amber-600">Pick a different start time to continue.</p>
+                  )}
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid min-w-0 gap-2">
-                  <label className="text-sm font-medium text-[#1a1a1a]">End Time</label>
-                  <select
-                    value={editDraft.endTime}
-                    onChange={(e) => setEditDraft({ ...editDraft, endTime: e.target.value })}
-                    className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none focus:border-[#C8A96A]"
-                    disabled={!editDraft.date || !editDraft.startTime}
-                  >
-                    <option value="">Select end time</option>
-                    {buildHourlyTimeOptions(editDraft.date)
-                      .filter((opt) => opt.value > editDraft.startTime)
-                      .map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
+              
               <div className="flex flex-wrap gap-3">
                 <Button variant="outline" onClick={() => setEditStep(1)} className="h-12 border-gray-200 px-6 hover:bg-gray-50">
                   Back
@@ -757,6 +918,25 @@ export default function SchedulePage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button onClick={handleDelete} className="bg-red-600 text-white hover:bg-red-700">Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={unavailableSelectionModal.open}
+        onOpenChange={(open) =>
+          !open && setUnavailableSelectionModal({ open: false, message: "" })
+        }
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unavailable Selection</DialogTitle>
+            <DialogDescription>{unavailableSelectionModal.message}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setUnavailableSelectionModal({ open: false, message: "" })}>
+              OK
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

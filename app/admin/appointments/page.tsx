@@ -146,7 +146,7 @@ function parseMeta(raw: string | null): {
     studioHours: 1, studioBackdrop: false, photoshootSets: 1, humanNotes: "",
   }
   if (!raw) return defaults
-  const match = raw.match(/^__meta__:(\{.*?\})\n?([\s\S]*)$/s)
+  const match = raw.match(/^__meta__:(\{.*?\})\n?([\s\S]*)$/)
   if (!match) return { ...defaults, humanNotes: raw }
   try {
     const meta = JSON.parse(match[1])
@@ -219,7 +219,6 @@ function mapRow(row: any): Appointment {
   const SERVICE_LABELS: Record<string, string> = {
     // admin slugs
     studio_rental: "Studio Rental",
-<<<<<<< HEAD
     pkg_a: "Package A – Indoor Set Design",
     pkg_b: "Package B – Plain Background",
     pkg_c: "Package C – Outdoor Shoot",
@@ -249,12 +248,6 @@ function mapRow(row: any): Appointment {
 
     "Full Day (8 hrs) — With Backdrop":
       "Full Day (8 hrs) — With Backdrop",
-=======
-    pkg_a:         "Package A – Indoor Set Design",
-    pkg_b:         "Package B – Plain Background",
-    pkg_c:         "Package C – Outdoor Shoot",
-    makeup_only:   "Makeup Only",
->>>>>>> main
   }
 
   const serviceLabel = SERVICE_LABELS[serviceSlug] || getBookingServiceLabel(row)
@@ -271,24 +264,16 @@ function mapRow(row: any): Appointment {
     duration,
     service:         serviceLabel,
     serviceSlug,
-<<<<<<< HEAD
     serviceId:      row.service_id ?? null,
     packageId:      row.package_id ?? null,
     makeupServiceId: row.makeup_service_id ?? null,
     studioRentalOptionId: row.studio_rental_option_id ?? null,
     addons:        { photographer: meta.photographer, makeup: meta.makeup },
     makeupPeople:  meta.makeupPeople,
+    makeupOnlyPeople: meta.makeupOnlyPeople,
     studioHours:   meta.studioHours,
     studioBackdrop:meta.studioBackdrop,
     photoshootSets:meta.photoshootSets,
-=======
-    addons:          { photographer: meta.photographer, makeup: meta.makeup },
-    makeupPeople:    meta.makeupPeople,
-    makeupOnlyPeople:meta.makeupOnlyPeople,
-    studioHours:     meta.studioHours,
-    studioBackdrop:  meta.studioBackdrop,
-    photoshootSets:  meta.photoshootSets,
->>>>>>> main
     totalPrice,
     total_price:     totalPrice,
     status:          (row.status as Status) ?? "pending",
@@ -1072,6 +1057,7 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     let channel: any
+    let refreshTimer: number | undefined
 
     const setupRealtime = async () => {
       await loadAppointments()
@@ -1098,7 +1084,23 @@ export default function AppointmentsPage() {
 
     setupRealtime()
 
+    refreshTimer = window.setInterval(() => {
+      void loadAppointments()
+    }, 5000)
+
+    const refreshOnFocus = () => {
+      if (document.visibilityState !== "hidden") {
+        void loadAppointments()
+      }
+    }
+
+    window.addEventListener("focus", refreshOnFocus)
+    document.addEventListener("visibilitychange", refreshOnFocus)
+
     return () => {
+      if (refreshTimer) window.clearInterval(refreshTimer)
+      window.removeEventListener("focus", refreshOnFocus)
+      document.removeEventListener("visibilitychange", refreshOnFocus)
       if (channel) {
         supabase.removeChannel(channel)
       }

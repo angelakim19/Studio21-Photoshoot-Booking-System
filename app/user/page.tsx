@@ -74,6 +74,17 @@ export default function Dashboard() {
     "Package A â€” Indoor Set Design": "Package A - Indoor Set Design",
     "Package B â€” Plain Background": "Package B - Plain Background",
     "Package C â€” Outdoor Shoot": "Package C - Outdoor Shoot",
+    "1 Hour — Basic Setup": "1 Hour - Basic Setup",
+    "1 Hour — With Backdrop": "1 Hour - With Backdrop",
+    "2 Hours — Basic Setup": "2 Hours - Basic Setup",
+    "2 Hours — With Backdrop": "2 Hours - With Backdrop",
+    "3 Hours — Basic Setup": "3 Hours - Basic Setup",
+    "3 Hours — With Backdrop": "3 Hours - With Backdrop",
+    "Half Day (4 hrs) — With Backdrop": "Half Day (4 hrs) - With Backdrop",
+    "Full Day (8 hrs) — With Backdrop": "Full Day (8 hrs) - With Backdrop",
+    "Natural/Everyday Look": "Natural/Everyday Look",
+    "Glamour/Evening": "Glamour/Evening",
+    "Bridal Makeup": "Bridal Makeup",
   }
 
   const packageLabels: Record<number, string> = {
@@ -91,10 +102,15 @@ export default function Dashboard() {
   }
 
   const getDisplayService = (booking: any) => {
-    return booking?.package_name_snapshot || booking?.service || "—"
+    const value = booking?.package_name_snapshot || booking?.service
+    if (!value) return "—"
+    return serviceLabels[value] || value
   }
 
   const getSyncedDisplayService = (booking: any) => {
+    if (booking?.package_name_snapshot) {
+      return serviceLabels[booking.package_name_snapshot] || booking.package_name_snapshot
+    }
     if (booking?.package_id) return packageLabels[Number(booking.package_id)] || "Photoshoot"
     if (booking?.makeup_service_id) return "Makeup"
     if (booking?.studio_rental_option_id) return "Studio Rental"
@@ -103,9 +119,6 @@ export default function Dashboard() {
     if (serviceId === 1) return "Photoshoot"
     if (serviceId === 2) return "Makeup"
     if (serviceId === 3) return "Studio Rental"
-
-    const snapshot = booking?.package_name_snapshot
-    if (snapshot) return serviceLabels[snapshot] || snapshot
 
     return getDisplayService(booking)
   }
@@ -172,6 +185,7 @@ export default function Dashboard() {
   useEffect(() => {
     let channel: any
     let isActive = true
+    let refreshTimer: number | undefined
 
     const resolveBookingUserIds = async (user: any) => {
       const ids = new Set<string>()
@@ -260,11 +274,15 @@ export default function Dashboard() {
     }
 
     setup()
+    refreshTimer = window.setInterval(() => {
+      void load()
+    }, 5000)
     window.addEventListener("focus", refreshOnFocus)
     document.addEventListener("visibilitychange", refreshOnFocus)
 
     return () => {
       isActive = false
+      if (refreshTimer) window.clearInterval(refreshTimer)
       window.removeEventListener("focus", refreshOnFocus)
       document.removeEventListener("visibilitychange", refreshOnFocus)
       if (channel) supabase.removeChannel(channel)

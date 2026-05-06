@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useBooking } from "@/lib/booking-context"
 import { supabase } from "@/lib/supabaseClient"
 
@@ -87,9 +88,23 @@ export function BookingStep3() {
  const handleDateSelect = (day: number) => {
   const selectedDate = new Date(year, month, day)
 
-  if (!isPastDate(selectedDate) && isDateAvailable(selectedDate)) {
-    updateBookingData({ date: selectedDate, time: "" })
+  if (isPastDate(selectedDate)) {
+    setUnavailableModal({
+      open: true,
+      message: "You cannot select a past date. Please choose today or a future date.",
+    })
+    return
   }
+
+  if (!isDateAvailable(selectedDate)) {
+    setUnavailableModal({
+      open: true,
+      message: "This date is unavailable. Please choose another available date.",
+    })
+    return
+  }
+
+  updateBookingData({ date: selectedDate, time: "" })
 }
 
 useEffect(() => {
@@ -126,6 +141,35 @@ useEffect(() => {
 
   const handleNext = async () => {
     if (!bookingData.date || !bookingData.time) return
+    const numericDuration = toNumericDuration(bookingData.duration)
+    const selectedDateIso = dateToIso(bookingData.date)
+    if (numericDuration > 0 && selectedDateIso) {
+      try {
+        const res = await fetch("/api/availability", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: selectedDateIso, duration: numericDuration }),
+        })
+        const data = await res.json()
+        const stillAvailable =
+          !!(res.ok && Array.isArray(data?.slots) && data.slots.includes(bookingData.time))
+        if (!stillAvailable) {
+          updateBookingData({ time: "" })
+          setUnavailableModal({
+            open: true,
+            message: "That time slot was just taken. Please select another available time.",
+          })
+          await fetchAvailability(bookingData.date)
+          return
+        }
+      } catch (err) {
+        setUnavailableModal({
+          open: true,
+          message: "We could not verify availability right now. Please try again.",
+        })
+        return
+      }
+    }
 
     const editId = editingBookingId ?? (() => {
       try {
@@ -144,20 +188,31 @@ useEffect(() => {
       const time = bookingData.time
       const duration = bookingData.duration || 1
 
-      const payload: any = {
-        service: bookingData.service,
-        date,
-        time,
+      const payload: Record<string, any> = {
         start_datetime: `${date} ${time}:00`,
         end_datetime: `${date} ${addHours(time, duration)}:00`,
       }
 
-      const { error } = await supabase
-        .from("bookings")
-        .update(payload)
-        .eq("id", editId)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const accessToken = session?.access_token
+      if (!accessToken) return alert("You must be logged in")
 
-      if (error) return alert("Failed to save booking changes")
+      const res = await fetch("/api/bookings/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          bookingId: editId,
+          updates: payload,
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) return alert(json?.error || "Failed to save booking changes")
 
       if (typeof window !== "undefined") {
         localStorage.removeItem("bookingEditMeta")
@@ -182,6 +237,7 @@ useEffect(() => {
 
   const [timeSlots, setTimeSlots] = useState<any[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [unavailableModal, setUnavailableModal] = useState({ open: false, message: "" })
 
  const fetchAvailability = async (selectedDate: Date) => {
   try {
@@ -335,7 +391,6 @@ useEffect(() => {
                   <button
                     key={day}
                     onClick={() => handleDateSelect(day)}
-                    disabled={isPast || !isAvailable}
                     className={`
                       aspect-square rounded-lg text-sm font-medium transition-all
                       ${isSelected 
@@ -437,6 +492,20 @@ useEffect(() => {
           <ArrowRight className="ml-2 h-5 w-5" />
         </Button>
       </div>
+      <Dialog
+        open={unavailableModal.open}
+        onOpenChange={(open) => !open && setUnavailableModal({ open: false, message: "" })}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unavailable Selection</DialogTitle>
+            <DialogDescription>{unavailableModal.message}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setUnavailableModal({ open: false, message: "" })}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
