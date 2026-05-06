@@ -60,6 +60,7 @@ type FormType = {
   studioHours: number; studioBackdrop: boolean
   notes: string; paymentMethod: string
   paymentReference: string; paymentMethodOther: string
+  makeupOnlyPeople: number
 }
 
 type Props = {
@@ -112,6 +113,11 @@ const localToday = (): string => new Date().toLocaleDateString("en-CA")
 
 const isPhotoshootSvc = (s: string): boolean =>
   PHOTOSHOOT_PACKAGES.some(p => p.value === s)
+
+const isMakeupOnlySvc = (s: string): boolean => s === "makeup_only"
+
+const MAKEUP_ONLY_PRICE_PER_PERSON = 1200 // matches makeup_services.price_per_person
+const MAKEUP_ONLY_DURATION_MIN = 60       // 1 hour flat
 
 /**
  * Parse a DB timestamp string as LOCAL time.
@@ -678,6 +684,7 @@ export default function EditAppointmentDialog({
   // ── Derived durations ──────────────────────────────────────────────────────
   const isStudioRental   = form.service === "studio_rental"
   const isPhotoshoot     = isPhotoshootSvc(form.service)
+  const isMakeupOnly     = isMakeupOnlySvc(form.service)
 
   // Makeup add-on adds 1 hour per person before the main session
   const makeupExtraMin  = isStudioRental && form.addons.makeup ? (form.makeupPeople ?? 1) * 60 : 0
@@ -685,7 +692,9 @@ export default function EditAppointmentDialog({
     ? (form.studioHours ?? 1) * 60
     : isPhotoshoot
       ? (form.photoshootSets ?? 1) * 120
-      : form.duration
+      : isMakeupOnly
+        ? (form.makeupOnlyPeople ?? 1) * MAKEUP_ONLY_DURATION_MIN
+        : form.duration
   const totalDurationMin = baseDurationMin + makeupExtraMin
   const endTime = form.time ? fmtHHMM(toMin(form.time) + totalDurationMin) : ""
 
@@ -725,6 +734,8 @@ export default function EditAppointmentDialog({
   } else if (isPhotoshoot) {
     const pkg = PHOTOSHOOT_PACKAGES.find(p => p.value === form.service)
     if (pkg) basePrice = pkg.prices[form.photoshootSets ?? 1] ?? 0
+  } else if (isMakeupOnly) {
+    basePrice = (form.makeupOnlyPeople ?? 1) * MAKEUP_ONLY_PRICE_PER_PERSON
   }
   const addonsPrice = isStudioRental
     ? (form.addons.photographer ? ADDON_PHOTOGRAPHER_PRICE : 0)
@@ -787,10 +798,11 @@ export default function EditAppointmentDialog({
               const val = e.target.value
               setForm({
                 ...form, service: val, photoshootSets: 1, studioHours: 1,
-                studioBackdrop: false, duration: val === "studio_rental" ? 60 : 120,
+                studioBackdrop: false, duration: val === "studio_rental" ? 60 : val === "makeup_only" ? 60 : 120,
                 time: "",
                 addons: val === "studio_rental" ? form.addons : { photographer: false, makeup: false },
                 makeupPeople: 1,
+                makeupOnlyPeople: 1,
               })
             }}
           >
@@ -798,6 +810,9 @@ export default function EditAppointmentDialog({
             <optgroup label="Studio Rental"><option value="studio_rental">Studio Rental</option></optgroup>
             <optgroup label="Photoshoot Packages">
               {PHOTOSHOOT_PACKAGES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </optgroup>
+            <optgroup label="Makeup Services">
+              <option value="makeup_only">Makeup Only (1 hr) – ₱1,200/person</option>
             </optgroup>
           </select>
         </div>
@@ -825,6 +840,30 @@ export default function EditAppointmentDialog({
                   <span className="text-[10px] font-semibold text-[#C8A96A] mt-0.5">₱{(selectedPkg.prices[n] ?? 0).toLocaleString()}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* MAKEUP ONLY CONFIG */}
+        {isMakeupOnly && (
+          <div className="bg-gradient-to-br from-[#F5F5F5] to-white border border-gray-200 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-[#C8A96A] uppercase tracking-wide">💄 Makeup Only</p>
+              <span className="text-[10px] text-[#6B6B6B] bg-white border border-gray-200 rounded-full px-2 py-0.5">1 hr · ₱1,200/person</span>
+            </div>
+            <p className="text-xs text-[#6B6B6B] leading-snug">Hair &amp; Makeup Artist — standalone makeup session, no photoshoot.</p>
+            <div className="flex items-center gap-3 bg-[#C8A96A]/5 rounded-lg px-3 py-2 text-xs">
+              <span className="text-[#6B6B6B] font-medium">Number of people:</span>
+              <button type="button"
+                onClick={() => setForm({ ...form, makeupOnlyPeople: Math.max(1, (form.makeupOnlyPeople ?? 1) - 1), time: "" })}
+                className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center hover:bg-gray-100 text-[#1A1A1A] font-bold">−</button>
+              <span className="w-5 text-center font-bold text-[#1A1A1A]">{form.makeupOnlyPeople ?? 1}</span>
+              <button type="button"
+                onClick={() => setForm({ ...form, makeupOnlyPeople: Math.min(10, (form.makeupOnlyPeople ?? 1) + 1), time: "" })}
+                className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center hover:bg-gray-100 text-[#1A1A1A] font-bold">+</button>
+              <span className="text-[#C8A96A] font-semibold ml-auto">
+                ₱{((form.makeupOnlyPeople ?? 1) * MAKEUP_ONLY_PRICE_PER_PERSON).toLocaleString()}
+              </span>
             </div>
           </div>
         )}
@@ -1076,6 +1115,12 @@ export default function EditAppointmentDialog({
               <div className="flex justify-between text-[#6B6B6B]">
                 <span>{form.photoshootSets ?? 1}×{selectedPkg.label.split('–')[0].trim()}</span>
                 <span className="font-medium">₱{(selectedPkg.prices[form.photoshootSets ?? 1] ?? 0).toLocaleString()}</span>
+              </div>
+            )}
+            {isMakeupOnly && (
+              <div className="flex justify-between text-[#6B6B6B]">
+                <span>Makeup Only × {form.makeupOnlyPeople ?? 1} person{(form.makeupOnlyPeople ?? 1) > 1 ? "s" : ""}</span>
+                <span className="font-medium">₱{((form.makeupOnlyPeople ?? 1) * MAKEUP_ONLY_PRICE_PER_PERSON).toLocaleString()}</span>
               </div>
             )}
             <div className="flex justify-between items-center pt-1.5 border-t border-gray-200 font-bold text-sm">
