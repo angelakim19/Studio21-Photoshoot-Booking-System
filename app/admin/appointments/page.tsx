@@ -790,8 +790,24 @@ function AppointmentTable({
                   </td>
                   <td className="p-3 text-gray-600">#{app.id}</td>
                   <td className="p-3 font-medium">{app.name}</td>
-                  <td className="p-3 text-gray-600">{app.date}</td>
-                  <td className="p-3 text-gray-600">{app.time} – {getEndTime(app.time, app.duration)}</td>
+                  <td className="p-3 text-gray-600">
+                    {app.date
+                      ? new Date(`${app.date}T00:00:00`).toLocaleDateString("en-PH", {
+                          weekday: "short", month: "short", day: "numeric", year: "numeric",
+                        })
+                      : "—"}
+                  </td>
+                  <td className="p-3 text-gray-600">
+                    {app.time
+                      ? (() => {
+                          const fmt = (hhmm: string) => {
+                            const [h, m] = hhmm.split(":").map(Number)
+                            return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
+                          }
+                          return `${fmt(app.time)} – ${fmt(getEndTime(app.time, app.duration))}`
+                        })()
+                      : "—"}
+                  </td>
                   <td className="p-3 text-gray-700">{app.service}</td>
                   <td className="p-3 font-semibold text-[#C8A96A]">₱{app.totalPrice.toLocaleString()}</td>
                   <td className="p-3 text-gray-600">{app.paymentReference || "-"}</td>
