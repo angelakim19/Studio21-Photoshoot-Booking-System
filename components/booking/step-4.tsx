@@ -207,7 +207,7 @@ export function BookingStep4() {
 
             <div className="flex flex-col gap-3">
               <Button asChild className="bg-[#C8A96A] hover:bg-[#B8995A] text-white h-12">
-                <Link href="/dashboard">View My Bookings</Link>
+                <Link href="/user">View My Bookings</Link>
               </Button>
               <Button variant="outline" onClick={resetBooking} asChild className="border-gray-200 hover:border-[#C8A96A] h-12">
                 <Link href="/booking">Book Another Session</Link>
