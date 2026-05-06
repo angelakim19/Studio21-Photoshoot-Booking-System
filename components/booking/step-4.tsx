@@ -67,7 +67,16 @@ export function BookingStep4() {
       )
         .toISOString()
         .split("T")[0]
-      
+      let packageNameSnapshot = bookingData.package_name_snapshot
+
+      if (bookingData.service === "makeup") {
+        packageNameSnapshot = "Makeup Service"
+      }
+
+      if (bookingData.service === "studio-rental") {
+        packageNameSnapshot = "Studio Rental"
+      }
+
       const res = await fetch("/api/availability/bookings/create", {
         method: "POST",
         headers: {
@@ -95,7 +104,7 @@ export function BookingStep4() {
         total_price: getPrice(),
 
         // ✅ snapshots
-        package_name_snapshot: bookingData.package_name_snapshot,
+        package_name_snapshot: packageNameSnapshot,
         package_price_snapshot: bookingData.package_price_snapshot,
         inclusions_snapshot: bookingData.inclusions_snapshot,
 

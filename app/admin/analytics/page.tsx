@@ -1,123 +1,48 @@
-"use client"
+// app/admin/analytics/page.tsx
 
-import { analytics } from "../../../lib/admin-data"
-import { monthlyRevenue, serviceBreakdown, weeklyBookings, PIE_COLORS } from "../../../lib/analytics-info"
-import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
-} from "recharts"
+import { getAnalyticsData } from "../../../lib/analytics-data"
+import AnalyticsCharts from "@/components/admin/AnalyticsCharts"
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white border border-gray-100 rounded-xl shadow-lg p-3 text-sm">
-        <p className="font-medium text-[#1a1a1a] mb-1">{label}</p>
-        {payload.map((entry: any, i: number) => (
-          <p key={i} style={{ color: entry.color }} className="capitalize">
-            {entry.name === "revenue" ? `₱${entry.value.toLocaleString()}` : entry.value}
-            {entry.name !== "revenue" ? ` ${entry.name}` : ""}
-          </p>
-        ))}
-      </div>
-    )
-  }
-  return null
-}
+export default async function AnalyticsPage() {
+  const { stats, monthlyRevenue, weeklyBookings, serviceBreakdown } =
+    await getAnalyticsData()
 
-export default function AnalyticsPage() {
+  const currentYear = new Date().getFullYear()
+
   return (
     <div>
-      <h1 className="text-2xl font-serif mb-6">Analytics</h1>
+      <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Service</p>
+      <h1 className="font-serif text-4xl mb-6 font-semibold text-[#111111]">Analytics</h1>
 
       {/* Stats */}
       <div className="grid md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white p-5 rounded-xl shadow-sm">
           <p className="text-gray-500 text-sm">Total Bookings</p>
-          <p className="text-2xl font-semibold">{analytics.totalBookings}</p>
+          <p className="text-2xl font-semibold">{stats.totalBookings}</p>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm">
           <p className="text-gray-500 text-sm">Clients</p>
-          <p className="text-2xl font-semibold">{analytics.totalClients}</p>
+          <p className="text-2xl font-semibold">{stats.totalClients}</p>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm">
           <p className="text-gray-500 text-sm">Revenue</p>
-          <p className="text-2xl font-semibold">₱{analytics.revenue.toLocaleString()}</p>
+          <p className="text-2xl font-semibold">
+            ₱{stats.totalRevenue.toLocaleString()}
+          </p>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm">
           <p className="text-gray-500 text-sm">Popular</p>
-          <p className="text-2xl font-semibold">{analytics.popularService}</p>
+          <p className="text-2xl font-semibold">{stats.popularService}</p>
         </div>
       </div>
 
-      {/* Revenue Area Chart */}
-      <div className="bg-white p-6 rounded-xl shadow-sm mb-6">
-        <h2 className="font-serif text-lg font-semibold text-[#1a1a1a] mb-1">Revenue Over Time</h2>
-        <p className="text-sm text-gray-400 mb-6">Monthly revenue for 2026</p>
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={monthlyRevenue} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#C8A96A" stopOpacity={0.18} />
-                <stop offset="95%" stopColor="#C8A96A" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-            <Tooltip content={<CustomTooltip />} />
-            <Area type="monotone" dataKey="revenue" stroke="#C8A96A" strokeWidth={2.5} fill="url(#revenueGrad)" dot={false} activeDot={{ r: 5, fill: "#C8A96A" }} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Bottom row: Bar + Pie */}
-      <div className="grid md:grid-cols-2 gap-6">
-
-        {/* Weekly Bookings Bar Chart */}
-        <div className="bg-white p-6 rounded-xl shadow-sm">
-          <h2 className="font-serif text-lg font-semibold text-[#1a1a1a] mb-1">Weekly Bookings</h2>
-          <p className="text-sm text-gray-400 mb-6">Average bookings per day of week</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={weeklyBookings} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barSize={28}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f9f5ee" }} />
-              <Bar dataKey="bookings" fill="#C8A96A" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Service Breakdown Pie Chart */}
-        <div className="bg-white p-6 rounded-xl shadow-sm">
-          <h2 className="font-serif text-lg font-semibold text-[#1a1a1a] mb-1">Service Breakdown</h2>
-          <p className="text-sm text-gray-400 mb-4">Bookings by service type</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={serviceBreakdown}
-                cx="50%"
-                cy="50%"
-                innerRadius={55}
-                outerRadius={85}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {serviceBreakdown.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                formatter={(value) => <span className="text-xs text-gray-600">{value}</span>}
-              />
-              <Tooltip formatter={(value) => [`${value}%`, "Share"]} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-      </div>
+      {/* Charts (client component) */}
+      <AnalyticsCharts
+        monthlyRevenue={monthlyRevenue}
+        weeklyBookings={weeklyBookings}
+        serviceBreakdown={serviceBreakdown}
+        currentYear={currentYear}
+      />
     </div>
   )
 }

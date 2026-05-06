@@ -28,6 +28,7 @@ type Appointment = {
   studioRentalOptionId?: number | null
   addons: { photographer: boolean; makeup: boolean }
   makeupPeople: number
+  makeupOnlyPeople: number
   studioHours: number
   studioBackdrop: boolean
   photoshootSets: number
@@ -134,13 +135,14 @@ function parseMeta(raw: string | null): {
   photographer: boolean
   makeup: boolean
   makeupPeople: number
+  makeupOnlyPeople: number
   studioHours: number
   studioBackdrop: boolean
   photoshootSets: number
   humanNotes: string
 } {
   const defaults = {
-    photographer: false, makeup: false, makeupPeople: 1,
+    photographer: false, makeup: false, makeupPeople: 1, makeupOnlyPeople: 1,
     studioHours: 1, studioBackdrop: false, photoshootSets: 1, humanNotes: "",
   }
   if (!raw) return defaults
@@ -149,13 +151,14 @@ function parseMeta(raw: string | null): {
   try {
     const meta = JSON.parse(match[1])
     return {
-      photographer:   !!meta.photographer,
-      makeup:         !!meta.makeup,
-      makeupPeople:   Number(meta.makeupPeople)   || 1,
-      studioHours:    Number(meta.studioHours)    || 1,
-      studioBackdrop: !!meta.studioBackdrop,
-      photoshootSets: Number(meta.photoshootSets) || 1,
-      humanNotes:     match[2].trim(),
+      photographer:    !!meta.photographer,
+      makeup:          !!meta.makeup,
+      makeupPeople:    Number(meta.makeupPeople)    || 1,
+      makeupOnlyPeople:Number(meta.makeupOnlyPeople)|| 1,
+      studioHours:     Number(meta.studioHours)     || 1,
+      studioBackdrop:  !!meta.studioBackdrop,
+      photoshootSets:  Number(meta.photoshootSets)  || 1,
+      humanNotes:      match[2].trim(),
     }
   } catch {
     return { ...defaults, humanNotes: raw }
@@ -165,7 +168,8 @@ function parseMeta(raw: string | null): {
 function buildNotes(
   meta: {
     photographer: boolean; makeup: boolean; makeupPeople: number
-    studioHours: number; studioBackdrop: boolean; photoshootSets: number
+    makeupOnlyPeople: number; studioHours: number; studioBackdrop: boolean
+    photoshootSets: number
   },
   humanNotes: string
 ): string {
@@ -215,6 +219,7 @@ function mapRow(row: any): Appointment {
   const SERVICE_LABELS: Record<string, string> = {
     // admin slugs
     studio_rental: "Studio Rental",
+<<<<<<< HEAD
     pkg_a: "Package A – Indoor Set Design",
     pkg_b: "Package B – Plain Background",
     pkg_c: "Package C – Outdoor Shoot",
@@ -244,6 +249,12 @@ function mapRow(row: any): Appointment {
 
     "Full Day (8 hrs) — With Backdrop":
       "Full Day (8 hrs) — With Backdrop",
+=======
+    pkg_a:         "Package A – Indoor Set Design",
+    pkg_b:         "Package B – Plain Background",
+    pkg_c:         "Package C – Outdoor Shoot",
+    makeup_only:   "Makeup Only",
+>>>>>>> main
   }
 
   const serviceLabel = SERVICE_LABELS[serviceSlug] || getBookingServiceLabel(row)
@@ -252,14 +263,15 @@ function mapRow(row: any): Appointment {
     id: row.id,
     firstName,
     lastName,
-    name:          `${firstName} ${lastName}`.trim() || "—",
-    email:         row.users?.email ?? "",
-    phone:         row.users?.phone ?? "",
+    name:            `${firstName} ${lastName}`.trim() || "—",
+    email:           row.users?.email ?? "",
+    phone:           row.users?.phone ?? "",
     date,
     time,
     duration,
-    service:       serviceLabel,
+    service:         serviceLabel,
     serviceSlug,
+<<<<<<< HEAD
     serviceId:      row.service_id ?? null,
     packageId:      row.package_id ?? null,
     makeupServiceId: row.makeup_service_id ?? null,
@@ -269,9 +281,17 @@ function mapRow(row: any): Appointment {
     studioHours:   meta.studioHours,
     studioBackdrop:meta.studioBackdrop,
     photoshootSets:meta.photoshootSets,
+=======
+    addons:          { photographer: meta.photographer, makeup: meta.makeup },
+    makeupPeople:    meta.makeupPeople,
+    makeupOnlyPeople:meta.makeupOnlyPeople,
+    studioHours:     meta.studioHours,
+    studioBackdrop:  meta.studioBackdrop,
+    photoshootSets:  meta.photoshootSets,
+>>>>>>> main
     totalPrice,
-    total_price:   totalPrice,
-    status:        (row.status as Status) ?? "pending",
+    total_price:     totalPrice,
+    status:          (row.status as Status) ?? "pending",
     paymentMethod:    payment?.payment_method    ?? undefined,
     paymentReference: payment?.payment_reference ?? undefined,
     notes: meta.humanNotes,
@@ -508,7 +528,7 @@ async function upsertBooking(
     addons: { photographer: boolean; makeup: boolean }
     notes: string; paymentMethod: string; paymentReference: string
     paymentMethodOther: string; studioHours: number; studioBackdrop: boolean
-    photoshootSets: number; makeupPeople: number
+    photoshootSets: number; makeupPeople: number; makeupOnlyPeople: number
   },
   calculatedPrice: number,
   editingId: number | null,
@@ -523,10 +543,13 @@ async function upsertBooking(
   }
 
   // Compute end datetime
+  const isMakeupOnly   = form.service === "makeup_only"
   const makeupExtraMins = form.addons.makeup ? (form.makeupPeople ?? 1) * 60 : 0
   const baseMins = form.service === "studio_rental"
     ? (form.studioHours ?? 1) * 60
-    : form.duration  // dialog sets duration = sets × 120 for photoshoots
+    : isMakeupOnly
+      ? 60
+      : form.duration  // dialog sets duration = sets × 120 for photoshoots
   const endDt = new Date(startDt.getTime() + (baseMins + makeupExtraMins) * 60000)
 
   const finalMethod = form.paymentMethod === "other"
@@ -536,12 +559,13 @@ async function upsertBooking(
   // Encode all config into notes so we can restore it on next load
   const notesValue = buildNotes(
     {
-      photographer:   form.addons.photographer,
-      makeup:         form.addons.makeup,
-      makeupPeople:   form.makeupPeople ?? 1,
-      studioHours:    form.studioHours ?? 1,
-      studioBackdrop: form.studioBackdrop,
-      photoshootSets: form.photoshootSets ?? 1,
+      photographer:    form.addons.photographer,
+      makeup:          form.addons.makeup,
+      makeupPeople:    form.makeupPeople ?? 1,
+      makeupOnlyPeople:form.makeupOnlyPeople ?? 1,
+      studioHours:     form.studioHours ?? 1,
+      studioBackdrop:  form.studioBackdrop,
+      photoshootSets:  form.photoshootSets ?? 1,
     },
     form.notes
   )
@@ -549,6 +573,7 @@ async function upsertBooking(
   // ── Resolve relational IDs in background (non-blocking for the main save) ───
   const isStudioRental = form.service === "studio_rental"
   const isPhotoshoot   = ["pkg_a", "pkg_b", "pkg_c"].includes(form.service)
+  // isMakeupOnly already declared above
 
   // Resolve service_id
   let serviceId: number | null = null
@@ -573,6 +598,13 @@ async function upsertBooking(
       if (packageId) {
         packageVariationId = await resolvePackageVariationId(packageId, form.photoshootSets ?? 1)
       }
+    }
+  } else if (isMakeupOnly) {
+    // Makeup-only: look up the makeup service row (service_id = 3 in your DB)
+    serviceId = await resolveServiceId("Makeup")
+    if (!serviceId) serviceId = await resolveServiceId("Hair")
+    if (serviceId) {
+      makeupServiceId = await resolveMakeupServiceId(serviceId)
     }
   }
 
@@ -605,10 +637,16 @@ async function upsertBooking(
     }
   }
 
-  // ── Build makeup_service_id for bookings row (only for studio rental + makeup addon) ──
-  const bookingMakeupServiceId = (isStudioRental && form.addons.makeup)
-    ? makeupServiceId
-    : null
+  // ── Build makeup_service_id (studio rental addon OR standalone makeup_only) ──
+  const bookingMakeupServiceId =
+    (isStudioRental && form.addons.makeup) || isMakeupOnly
+      ? makeupServiceId
+      : null
+
+  const numberOfPersons =
+    (isStudioRental && form.addons.makeup) ? (form.makeupPeople ?? 1)
+    : isMakeupOnly                          ? (form.makeupOnlyPeople ?? 1)
+    : undefined
 
   // ── Conflict check — prevent double-booking ────────────────────────────────
   // Query for any pending/approved booking that overlaps [startDt, endDt),
@@ -660,9 +698,7 @@ async function upsertBooking(
       package_variation_id:   packageVariationId    ?? undefined,
       studio_rental_option_id:studioRentalOptionId  ?? undefined,
       makeup_service_id:      bookingMakeupServiceId ?? undefined,
-      number_of_persons:      (isStudioRental && form.addons.makeup)
-                                ? (form.makeupPeople ?? 1)
-                                : undefined,
+      number_of_persons:      numberOfPersons,
     }
     if (userId) payload.user_id = userId
 
@@ -715,9 +751,7 @@ async function upsertBooking(
         package_variation_id:   packageVariationId    ?? undefined,
         studio_rental_option_id:studioRentalOptionId  ?? undefined,
         makeup_service_id:      bookingMakeupServiceId ?? undefined,
-        number_of_persons:      (isStudioRental && form.addons.makeup)
-                                  ? (form.makeupPeople ?? 1)
-                                  : undefined,
+        number_of_persons:      numberOfPersons,
       })
       .select("id")
       .single()
@@ -937,8 +971,24 @@ function AppointmentTable({
                   </td>
                   <td className="p-3 text-gray-600">#{app.id}</td>
                   <td className="p-3 font-medium">{app.name}</td>
-                  <td className="p-3 text-gray-600">{app.date}</td>
-                  <td className="p-3 text-gray-600">{app.time} – {getEndTime(app.time, app.duration)}</td>
+                  <td className="p-3 text-gray-600">
+                    {app.date
+                      ? new Date(`${app.date}T00:00:00`).toLocaleDateString("en-PH", {
+                          weekday: "short", month: "short", day: "numeric", year: "numeric",
+                        })
+                      : "—"}
+                  </td>
+                  <td className="p-3 text-gray-600">
+                    {app.time
+                      ? (() => {
+                          const fmt = (hhmm: string) => {
+                            const [h, m] = hhmm.split(":").map(Number)
+                            return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
+                          }
+                          return `${fmt(app.time)} – ${fmt(getEndTime(app.time, app.duration))}`
+                        })()
+                      : "—"}
+                  </td>
                   <td className="p-3 text-gray-700">{app.service}</td>
                   <td className="p-3 font-semibold text-[#C8A96A]">₱{app.totalPrice.toLocaleString()}</td>
                   <td className="p-3 text-gray-600">{app.paymentReference || "-"}</td>
@@ -1011,7 +1061,7 @@ export default function AppointmentsPage() {
     date: "", time: "", duration: 60, service: "",
     addons: { photographer: false, makeup: false },
     notes: "", paymentMethod: "", paymentReference: "", paymentMethodOther: "",
-    studioHours: 1, studioBackdrop: false, photoshootSets: 1, makeupPeople: 1,
+    studioHours: 1, studioBackdrop: false, photoshootSets: 1, makeupPeople: 1, makeupOnlyPeople: 1,
   })
 
   const loadAppointments = useCallback(async () => {
@@ -1065,7 +1115,7 @@ export default function AppointmentsPage() {
       date: "", time: "", duration: 60, service: "",
       addons: { photographer: false, makeup: false },
       notes: "", paymentMethod: "", paymentReference: "", paymentMethodOther: "",
-      studioHours: 1, studioBackdrop: false, photoshootSets: 1, makeupPeople: 1,
+      studioHours: 1, studioBackdrop: false, photoshootSets: 1, makeupPeople: 1, makeupOnlyPeople: 1,
     })
     setOpen(true)
   }
@@ -1092,6 +1142,7 @@ export default function AppointmentsPage() {
       studioBackdrop:     app.studioBackdrop,
       photoshootSets:     app.photoshootSets,
       makeupPeople:       app.makeupPeople,
+      makeupOnlyPeople:   app.makeupOnlyPeople,
     })
     setOpen(true)
   }
@@ -1154,7 +1205,8 @@ export default function AppointmentsPage() {
     <div className="space-y-6 p-6">
       <div className="flex flex-col sm:flex-row justify-between gap-3 items-start sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold">Appointments</h1>
+          <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Management</p>
+          <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Appointments</h1>
           <p className="text-sm text-gray-500 mt-0.5">{counts.all} total appointments</p>
         </div>
         {isAdmin && (
