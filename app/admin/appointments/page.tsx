@@ -1084,9 +1084,9 @@ export default function AppointmentsPage() {
 
     setupRealtime()
 
-    refreshTimer = window.setInterval(() => {
-      void loadAppointments()
-    }, 5000)
+    //refreshTimer = window.setInterval(() => {
+    //  void loadAppointments()
+    //}, 5000)
 
     const refreshOnFocus = () => {
       if (document.visibilityState !== "hidden") {
