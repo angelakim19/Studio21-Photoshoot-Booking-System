@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Pencil, Trash2, Plus, Search, ChevronDown } from "lucide-react"
+import { Pencil, Trash2, Plus, Search, ChevronDown, CalendarDays } from "lucide-react"
 import EditAppointmentDialog from "@/components/admin/EditAppointmentDialog"
 import DeleteConfirmModal from "@/components/admin/DeleteConfirmModal"
 import { supabase } from "@/lib/supabaseClient"
@@ -124,12 +124,6 @@ const getBookingServiceSlug = (row: any) => {
 }
 
 // ─── Meta encoding/decoding ───────────────────────────────────────────────────
-// All booking config (add-ons, studio options, etc.) is stored as a JSON block
-// at the top of the notes column so we never need add_ons / booking_addons /
-// makeup_services / packages / package_variations / studio_rental_options /
-// services joins for reading back booking details.
-//
-// Format:  __meta__:{"photographer":true,...}\nOptional human notes
 
 function parseMeta(raw: string | null): {
   photographer: boolean
@@ -181,10 +175,8 @@ function buildNotes(
 
 // ─── Supabase data helpers ────────────────────────────────────────────────────
 
-/** Parse a DB datetime string as LOCAL (PH) time — strips any UTC/timezone suffix */
 function parseLocalDt(raw: string | null | undefined): Date | null {
   if (!raw) return null
-  // Strip timezone suffix so JS treats it as local time, not UTC
   const normalized = raw.replace(" ", "T").replace(/([+-]\d{2}:\d{2}|Z)$/, "")
   return new Date(normalized)
 }
@@ -193,7 +185,6 @@ function mapRow(row: any): Appointment {
   const startDt = parseLocalDt(row.start_datetime)
   const endDt   = parseLocalDt(row.end_datetime)
 
-  // Extract date and time from local Date (not UTC)
   const pad = (n: number) => String(n).padStart(2, "0")
   const date = startDt
     ? `${startDt.getFullYear()}-${pad(startDt.getMonth() + 1)}-${pad(startDt.getDate())}`
@@ -212,42 +203,27 @@ function mapRow(row: any): Appointment {
   const firstName = row.users?.first_name ?? ""
   const lastName  = row.users?.last_name  ?? ""
 
-  // package_name_snapshot stores the service slug
-  // Slugs: "studio_rental" | "pkg_a" | "pkg_b" | "pkg_c"
   const serviceSlug = getBookingServiceSlug(row)
 
   const SERVICE_LABELS: Record<string, string> = {
-    // admin slugs
     studio_rental: "Studio Rental",
     pkg_a: "Package A – Indoor Set Design",
     pkg_b: "Package B – Plain Background",
     pkg_c: "Package C – Outdoor Shoot",
-
-    // user-side labels
     "Package A — Indoor Set Design": "Package A – Indoor Set Design",
     "Package B — Plain Background": "Package B – Plain Background",
     "Package C — Outdoor Shoot": "Package C – Outdoor Shoot",
-
-    // makeup
     "Natural/Everyday Look": "Natural/Everyday Look",
     "Glamour/Evening": "Glamour/Evening",
     "Bridal Makeup": "Bridal Makeup",
-
-    // studio rental packages
     "1 Hour — Basic Setup": "1 Hour — Basic Setup",
     "1 Hour — With Backdrop": "1 Hour — With Backdrop",
-
     "2 Hours — Basic Setup": "2 Hours — Basic Setup",
     "2 Hours — With Backdrop": "2 Hours — With Backdrop",
-
     "3 Hours — Basic Setup": "3 Hours — Basic Setup",
     "3 Hours — With Backdrop": "3 Hours — With Backdrop",
-
-    "Half Day (4 hrs) — With Backdrop":
-      "Half Day (4 hrs) — With Backdrop",
-
-    "Full Day (8 hrs) — With Backdrop":
-      "Full Day (8 hrs) — With Backdrop",
+    "Half Day (4 hrs) — With Backdrop": "Half Day (4 hrs) — With Backdrop",
+    "Full Day (8 hrs) — With Backdrop": "Full Day (8 hrs) — With Backdrop",
   }
 
   const serviceLabel = SERVICE_LABELS[serviceSlug] || getBookingServiceLabel(row)
@@ -284,6 +260,11 @@ function mapRow(row: any): Appointment {
 }
 
 async function fetchBookings(): Promise<Appointment[]> {
+  // OPTIMIZATION: Only fetch appointments from the last 30 days + future
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const fromDateStr = thirtyDaysAgo.toISOString();
+
   const { data, error } = await supabase
     .from("bookings")
     .select(`
@@ -301,7 +282,9 @@ async function fetchBookings(): Promise<Appointment[]> {
       users ( first_name, last_name, email, phone ),
       payments ( payment_method, payment_reference, created_at )
     `)
+    .gte("start_datetime", fromDateStr) // Filter old data
     .order("start_datetime", { ascending: false })
+    .limit(500) // Hard cap for safety
 
   if (error) {
     console.error("fetchBookings:", error.message)
@@ -352,12 +335,11 @@ async function deleteBookingFromDb(id: number): Promise<boolean> {
     return true
   }
 
-  // Remove Google Calendar event if one exists
   await fetch("/api/calendar/sync", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ bookingId: id, action: "delete" }),
-  }).catch(() => {}) // non-fatal if calendar API fails
+  }).catch(() => {}) 
 
   const {
     data: { session },
@@ -383,7 +365,6 @@ async function deleteBookingFromDb(id: number): Promise<boolean> {
     return await deleteDirectly()
   }
 
-  // Verify API delete actually removed row from DB
   const { data: verifyRow, error: verifyError } = await supabase
     .from("bookings")
     .select("id")
@@ -398,9 +379,7 @@ async function deleteBookingFromDb(id: number): Promise<boolean> {
 }
 
 // ─── Relational table helpers ─────────────────────────────────────────────────
-// These resolve IDs from the reference tables so we can write proper foreign keys.
 
-/** Returns the service_id for a given service name (e.g. "Studio Rental") */
 async function resolveServiceId(serviceName: string): Promise<number | null> {
   const { data } = await supabase
     .from("services")
@@ -411,7 +390,6 @@ async function resolveServiceId(serviceName: string): Promise<number | null> {
   return data?.id ?? null
 }
 
-/** Returns the package id for a slug like "pkg_a" by matching the name snapshot */
 async function resolvePackageId(serviceId: number, packageName: string): Promise<number | null> {
   const { data } = await supabase
     .from("packages")
@@ -423,7 +401,6 @@ async function resolvePackageId(serviceId: number, packageName: string): Promise
   return data?.id ?? null
 }
 
-/** Returns the package_variation id for a given package + number_of_sets */
 async function resolvePackageVariationId(packageId: number, numberOfSets: number): Promise<number | null> {
   const { data } = await supabase
     .from("package_variations")
@@ -435,7 +412,6 @@ async function resolvePackageVariationId(packageId: number, numberOfSets: number
   return data?.id ?? null
 }
 
-/** Returns the studio_rental_option id matching service + duration type */
 async function resolveStudioRentalOptionId(serviceId: number, duration: string): Promise<number | null> {
   const { data } = await supabase
     .from("studio_rental_options")
@@ -447,7 +423,6 @@ async function resolveStudioRentalOptionId(serviceId: number, duration: string):
   return data?.id ?? null
 }
 
-/** Returns the makeup_service id for the Studio Rental service */
 async function resolveMakeupServiceId(serviceId: number): Promise<number | null> {
   const { data } = await supabase
     .from("makeup_services")
@@ -458,7 +433,6 @@ async function resolveMakeupServiceId(serviceId: number): Promise<number | null>
   return data?.id ?? null
 }
 
-/** Returns the add_on id for Photographer by name */
 async function resolvePhotographerAddonId(): Promise<number | null> {
   const { data } = await supabase
     .from("add_ons")
@@ -469,7 +443,6 @@ async function resolvePhotographerAddonId(): Promise<number | null> {
   return data?.id ?? null
 }
 
-/** Returns the add_on id for Makeup/Hair by name */
 async function resolveMakeupAddonId(): Promise<number | null> {
   const { data } = await supabase
     .from("add_ons")
@@ -480,7 +453,6 @@ async function resolveMakeupAddonId(): Promise<number | null> {
   return data?.id ?? null
 }
 
-// Duration label mappings for studio_rental_options
 const STUDIO_HOURS_TO_DURATION: Record<number, string> = {
   1: "1 Hour",
   2: "2 Hours",
@@ -495,8 +467,11 @@ const PHOTOSHOOT_SLUG_TO_NAME: Record<string, string> = {
   pkg_c: "Package C",
 }
 
-/** Format a Date as "YYYY-MM-DD HH:MM:SS" in LOCAL (PH) time — no UTC conversion */
 function toLocalDtString(d: Date): string {
+  // Use plain "YYYY-MM-DD HH:MM:SS" with NO timezone suffix.
+  // The bookings table uses "timestamp without time zone", so PostgreSQL
+  // stores and compares wall-clock values as-is. Appending +08:00 causes
+  // the DB to shift the comparison window and silently miss conflicts.
   const p = (n: number) => String(n).padStart(2, "0")
   return (
     `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
@@ -504,7 +479,7 @@ function toLocalDtString(d: Date): string {
   )
 }
 
-// ─── Upsert booking (writes to both __meta__ notes AND relational tables) ─────
+// ─── Upsert booking ───────────────────────────────────────────────────────────
 
 async function upsertBooking(
   form: {
@@ -527,21 +502,19 @@ async function upsertBooking(
     return null
   }
 
-  // Compute end datetime
   const isMakeupOnly   = form.service === "makeup_only"
   const makeupExtraMins = form.addons.makeup ? (form.makeupPeople ?? 1) * 60 : 0
   const baseMins = form.service === "studio_rental"
     ? (form.studioHours ?? 1) * 60
     : isMakeupOnly
       ? 60
-      : form.duration  // dialog sets duration = sets × 120 for photoshoots
+      : form.duration 
   const endDt = new Date(startDt.getTime() + (baseMins + makeupExtraMins) * 60000)
 
   const finalMethod = form.paymentMethod === "other"
     ? form.paymentMethodOther
     : form.paymentMethod
 
-  // Encode all config into notes so we can restore it on next load
   const notesValue = buildNotes(
     {
       photographer:    form.addons.photographer,
@@ -555,12 +528,9 @@ async function upsertBooking(
     form.notes
   )
 
-  // ── Resolve relational IDs in background (non-blocking for the main save) ───
   const isStudioRental = form.service === "studio_rental"
   const isPhotoshoot   = ["pkg_a", "pkg_b", "pkg_c"].includes(form.service)
-  // isMakeupOnly already declared above
 
-  // Resolve service_id
   let serviceId: number | null = null
   let packageId: number | null = null
   let packageVariationId: number | null = null
@@ -585,7 +555,6 @@ async function upsertBooking(
       }
     }
   } else if (isMakeupOnly) {
-    // Makeup-only: look up the makeup service row (service_id = 3 in your DB)
     serviceId = await resolveServiceId("Makeup")
     if (!serviceId) serviceId = await resolveServiceId("Hair")
     if (serviceId) {
@@ -593,7 +562,6 @@ async function upsertBooking(
     }
   }
 
-  // ── Resolve / create user ───────────────────────────────────────────────────
   let userId: string | null = null
 
   if (form.email.trim()) {
@@ -622,7 +590,6 @@ async function upsertBooking(
     }
   }
 
-  // ── Build makeup_service_id (studio rental addon OR standalone makeup_only) ──
   const bookingMakeupServiceId =
     (isStudioRental && form.addons.makeup) || isMakeupOnly
       ? makeupServiceId
@@ -633,9 +600,6 @@ async function upsertBooking(
     : isMakeupOnly                          ? (form.makeupOnlyPeople ?? 1)
     : undefined
 
-  // ── Conflict check — prevent double-booking ────────────────────────────────
-  // Query for any pending/approved booking that overlaps [startDt, endDt),
-  // excluding the booking currently being edited.
   {
     const startIso = toLocalDtString(startDt)
     const endIso   = toLocalDtString(endDt)
@@ -644,8 +608,8 @@ async function upsertBooking(
       .from("bookings")
       .select("id", { count: "exact", head: true })
       .in("status", ["pending", "approved"])
-      .lt("start_datetime", endIso)   // existing.start < newEnd
-      .gt("end_datetime",   startIso) // existing.end   > newStart
+      .lt("start_datetime", endIso)
+      .gt("end_datetime",   startIso)
 
     if (editingId) {
       conflictQuery = conflictQuery.neq("id", editingId)
@@ -669,7 +633,6 @@ async function upsertBooking(
   }
 
   if (editingId) {
-    // ── UPDATE ──────────────────────────────────────────────────────────────
     const payload: Record<string, any> = {
       total_price:            calculatedPrice,
       start_datetime:         toLocalDtString(startDt),
@@ -677,7 +640,6 @@ async function upsertBooking(
       notes:                  notesValue,
       package_name_snapshot:  form.service,
       package_price_snapshot: calculatedPrice,
-      // Relational columns
       service_id:             serviceId             ?? undefined,
       package_id:             packageId             ?? undefined,
       package_variation_id:   packageVariationId    ?? undefined,
@@ -690,11 +652,9 @@ async function upsertBooking(
     const { error } = await supabase.from("bookings").update(payload).eq("id", editingId)
     if (error) { console.error("updateBooking:", error.message); return null }
 
-    // Sync booking_addons: clear old, re-insert
     await supabase.from("booking_addons").delete().eq("booking_id", editingId)
     await syncBookingAddons(editingId, form)
 
-    // Upsert payment
     const { data: existingPmt } = await supabase
       .from("payments").select("id").eq("booking_id", editingId)
       .order("created_at", { ascending: false }).limit(1)
@@ -717,7 +677,6 @@ async function upsertBooking(
     return editingId
 
   } else {
-    // ── INSERT ──────────────────────────────────────────────────────────────
     const { data: inserted, error } = await supabase
       .from("bookings")
       .insert({
@@ -730,7 +689,6 @@ async function upsertBooking(
         package_price_snapshot: calculatedPrice,
         status:                 "pending",
         payment_status:         "pending",
-        // Relational columns
         service_id:             serviceId             ?? undefined,
         package_id:             packageId             ?? undefined,
         package_variation_id:   packageVariationId    ?? undefined,
@@ -743,7 +701,6 @@ async function upsertBooking(
 
     if (error || !inserted) { console.error("insertBooking:", error?.message); return null }
 
-    // Write booking_addons
     await syncBookingAddons(inserted.id, form)
 
     if (finalMethod || form.paymentReference) {
@@ -759,9 +716,6 @@ async function upsertBooking(
     return inserted.id
   }
 }
-
-// ─── Write booking_addons rows ─────────────────────────────────────────────────
-// Only applies to Studio Rental bookings with add-ons selected.
 
 async function syncBookingAddons(
   bookingId: number,
@@ -787,13 +741,13 @@ async function syncBookingAddons(
     rows.push({
       booking_id: bookingId,
       addon_id: addonId,
-      addon_price_snapshot: 1500, // ADDON_PHOTOGRAPHER_PRICE
+      addon_price_snapshot: 1500, 
     })
   }
 
   if (makeup) {
     const addonId = await resolveMakeupAddonId()
-    const perPerson = 1200 // ADDON_MAKEUP_PRICE_PER_PERSON
+    const perPerson = 1200 
     rows.push({
       booking_id: bookingId,
       addon_id: addonId,
@@ -877,7 +831,6 @@ function AppointmentTable({
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 8
 
-  // ── Delete modal state ─────────────────────────────────────────────────────
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean
     ids: number[]
@@ -914,101 +867,151 @@ function AppointmentTable({
   }
 
   return (
-    <div className="bg-white rounded-xl shadow overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       {isAdmin && selected.length > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-red-50 border-b text-sm">
-          <span className="text-red-600 font-medium">{selected.length} selected</span>
-          <button
-            onClick={() => openDeleteModal([...selected])}
-            className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-          ><Trash2 size={14} /> Delete Selected</button>
-          <button onClick={() => setSelected([])} className="text-gray-500 hover:text-gray-700 underline">Clear</button>
+        <div className="flex items-center gap-3 px-5 py-3 bg-red-50 border-b border-red-100 text-sm">
+          <span className="text-red-600 font-semibold">{selected.length} selected</span>
+          <div className="flex gap-2 ml-1">
+            <button
+              onClick={() => openDeleteModal([...selected])}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors shadow-sm"
+            ><Trash2 size={13} /> Delete Selected</button>
+            <button onClick={() => setSelected([])} className="text-gray-400 hover:text-gray-600 text-xs underline underline-offset-2 transition-colors">Clear</button>
+          </div>
         </div>
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="p-3 w-10">
-                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded" />
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50/70">
+              <th className="pl-5 pr-3 py-3.5 w-10">
+                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll}
+                  className="rounded border-gray-300 text-[#C8A96A] focus:ring-[#C8A96A]/30 cursor-pointer" />
               </th>
-              <th className="p-3 text-left font-semibold text-gray-600">ID</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Client</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Date</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Time</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Service</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Price</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Payment Reference</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Payment Method</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Status</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Actions</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">ID</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Client</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Date & Time</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Service</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Price</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Payment Method</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Reference</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Status</th>
+              <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-gray-50">
             {paginatedData.length === 0 ? (
-              <tr><td colSpan={11} className="p-10 text-center text-gray-400">No appointments found.</td></tr>
+              <tr>
+                <td colSpan={10} className="py-16 text-center text-gray-400 text-sm">
+                  No appointments found.
+                </td>
+              </tr>
             ) : (
-              paginatedData.map((app) => (
-                <tr key={app.id} className={`border-t transition-colors ${selected.includes(app.id) ? "bg-amber-50" : "hover:bg-gray-50"}`}>
-                  <td className="p-3">
-                    <input type="checkbox" checked={selected.includes(app.id)} onChange={() => toggleSelect(app.id)} className="rounded" />
-                  </td>
-                  <td className="p-3 text-gray-600">#{app.id}</td>
-                  <td className="p-3 font-medium">{app.name}</td>
-                  <td className="p-3 text-gray-600">
-                    {app.date
-                      ? new Date(`${app.date}T00:00:00`).toLocaleDateString("en-PH", {
-                          weekday: "short", month: "short", day: "numeric", year: "numeric",
-                        })
-                      : "—"}
-                  </td>
-                  <td className="p-3 text-gray-600">
-                    {app.time
-                      ? (() => {
-                          const fmt = (hhmm: string) => {
-                            const [h, m] = hhmm.split(":").map(Number)
-                            return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
-                          }
-                          return `${fmt(app.time)} – ${fmt(getEndTime(app.time, app.duration))}`
-                        })()
-                      : "—"}
-                  </td>
-                  <td className="p-3 text-gray-700">{app.service}</td>
-                  <td className="p-3 font-semibold text-[#C8A96A]">₱{app.totalPrice.toLocaleString()}</td>
-                  <td className="p-3 text-gray-600">{app.paymentReference || "-"}</td>
-                  <td className="p-3 text-gray-600 capitalize">{app.paymentMethod?.replace(/_/g, " ") || "-"}</td>
-                  <td className="p-3">
-                    {isAdmin ? (
-                      <select value={app.status} onChange={(e) => onStatusChange(app.id, e.target.value as Status)}
-                        className={`text-xs font-semibold px-3 py-1 rounded-full border-0 outline-none cursor-pointer appearance-none ${statusStyles[app.status]}`}>
-                        <option value="approved">Approved</option>
-                        <option value="pending">Pending</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    ) : (
-                      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${statusStyles[app.status]}`}>
-                        {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3">
-                    {isAdmin ? (
-                      <div className="flex gap-3">
-                        <button onClick={() => onEdit(app)} className="text-[#C8A96A] hover:text-[#b8935a] transition-colors" title="Edit"><Pencil size={16} /></button>
-                        <button onClick={() => openDeleteModal([app.id])} className="text-red-400 hover:text-red-600 transition-colors" title="Delete"><Trash2 size={16} /></button>
-                      </div>
-                    ) : (
-                      <span className="text-gray-300 text-xs">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))
+              paginatedData.map((app) => {
+                const fmt = (hhmm: string) => {
+                  const [h, m] = hhmm.split(":").map(Number)
+                  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
+                }
+                return (
+                  <tr key={app.id} className={`group transition-colors ${selected.includes(app.id) ? "bg-amber-50/60" : "hover:bg-gray-50/80"}`}>
+                    {/* Checkbox */}
+                    <td className="pl-5 pr-3 py-3.5">
+                      <input type="checkbox" checked={selected.includes(app.id)} onChange={() => toggleSelect(app.id)}
+                        className="rounded border-gray-300 text-[#C8A96A] focus:ring-[#C8A96A]/30 cursor-pointer" />
+                    </td>
+
+                    {/* ID */}
+                    <td className="px-4 py-3.5 text-gray-400 text-xs font-mono">#{app.id}</td>
+
+                    {/* Client */}
+                    <td className="px-4 py-3.5">
+                      <p className="font-semibold text-gray-800 leading-tight">{app.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{app.email || "—"}</p>
+                    </td>
+
+                    {/* Date & Time */}
+                    <td className="px-4 py-3.5">
+                      {app.date ? (
+                        <>
+                          <p className="font-medium text-gray-800">
+                            {new Date(`${app.date}T00:00:00`).toLocaleDateString("en-PH", {
+                              weekday: "short", month: "short", day: "numeric", year: "numeric",
+                            })}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {app.time ? `${fmt(app.time)} – ${fmt(getEndTime(app.time, app.duration))}` : "—"}
+                          </p>
+                        </>
+                      ) : <span className="text-gray-400">—</span>}
+                    </td>
+
+                    {/* Service */}
+                    <td className="px-4 py-3.5 max-w-[180px]">
+                      <span className="text-gray-700 leading-snug line-clamp-2">{app.service || "—"}</span>
+                    </td>
+
+                    {/* Price */}
+                    <td className="px-4 py-3.5">
+                      <span className="font-bold text-[#C8A96A]">₱{app.totalPrice.toLocaleString()}</span>
+                    </td>
+
+                    {/* Payment Method */}
+                    <td className="px-4 py-3.5 text-gray-500 capitalize">
+                      {app.paymentMethod?.replace(/_/g, " ") || "—"}
+                    </td>
+
+                    {/* Payment Reference */}
+                    <td className="px-4 py-3.5 text-gray-500 font-mono text-xs tracking-wide">
+                      {app.paymentReference || "—"}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-4 py-3.5">
+                      {isAdmin ? (
+                        <select
+                          value={app.status}
+                          onChange={(e) => onStatusChange(app.id, e.target.value as Status)}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer appearance-none ${statusStyles[app.status]}`}
+                        >
+                          <option value="approved">Approved</option>
+                          <option value="pending">Pending</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      ) : (
+                        <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${statusStyles[app.status]}`}>
+                          {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-5 py-3.5">
+                      {isAdmin ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button onClick={() => onEdit(app)} title="Edit"
+                            className="p-2 rounded-lg text-gray-400 hover:text-[#C8A96A] hover:bg-amber-50 transition-all">
+                            <Pencil size={15} />
+                          </button>
+                          <button onClick={() => openDeleteModal([app.id])} title="Delete"
+                            className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
       </div>
-      <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+      <div className="border-t border-gray-100 px-5 py-3">
+        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+      </div>
 
       <DeleteConfirmModal
         open={deleteModal.open}
@@ -1057,7 +1060,6 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     let channel: any
-    let refreshTimer: number | undefined
 
     const setupRealtime = async () => {
       await loadAppointments()
@@ -1084,23 +1086,11 @@ export default function AppointmentsPage() {
 
     setupRealtime()
 
-    //refreshTimer = window.setInterval(() => {
-    //  void loadAppointments()
-    //}, 5000)
-
-    const refreshOnFocus = () => {
-      if (document.visibilityState !== "hidden") {
-        void loadAppointments()
-      }
-    }
-
-    window.addEventListener("focus", refreshOnFocus)
-    document.addEventListener("visibilitychange", refreshOnFocus)
+    // OPTIMIZATION: Removed window focus and visibility change event listeners.
+    // The realtime subscription natively handles syncing data without bombarding 
+    // the database every time you click back into the tab.
 
     return () => {
-      if (refreshTimer) window.clearInterval(refreshTimer)
-      window.removeEventListener("focus", refreshOnFocus)
-      document.removeEventListener("visibilitychange", refreshOnFocus)
       if (channel) {
         supabase.removeChannel(channel)
       }
@@ -1158,7 +1148,6 @@ export default function AppointmentsPage() {
       await loadAppointments()
       setOpen(false)
     }
-    // If newId is null (conflict or error), keep dialog open so user can fix it
   }
 
   const handleDelete = async (id: number) => {
@@ -1174,13 +1163,9 @@ export default function AppointmentsPage() {
   }
 
   const handleStatusChange = async (id: number, status: Status) => {
-    // Optimistic UI update
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
-
-    // Update status in DB
     await updateStatusInDb(id, status)
 
-    // Sync with Google Calendar
     if (status === "approved") {
       fetch("/api/calendar/sync", {
         method: "POST",
@@ -1209,7 +1194,10 @@ export default function AppointmentsPage() {
         <div>
           <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Management</p>
           <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Appointments</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{counts.all} total appointments</p>
+          <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5">
+            <CalendarDays size={13} className="text-gray-500" />
+            <span>{counts.all} total appointments</span>
+          </p>
         </div>
         {isAdmin && (
           <button onClick={openAdd}
@@ -1267,8 +1255,9 @@ export default function AppointmentsPage() {
       )}
 
       {loading ? (
-        <div className="bg-white rounded-xl shadow p-12 text-center text-gray-400 text-sm animate-pulse">
-          Loading appointments…
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-2 border-[#C8A96A] border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-400">Loading appointments…</p>
         </div>
       ) : (
         <AppointmentTable

@@ -1,13 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { useState } from "react"
+import { Eye, EyeOff, Trash2 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 
 export default function AdminSettingsPage() {
   const [previousPassword, setPreviousPassword] = useState("")
@@ -33,26 +28,14 @@ export default function AdminSettingsPage() {
   const validateAndOpenConfirm = () => {
     setPreviousPasswordError("")
     setPasswordError("")
-
     let hasError = false
-
-    if (!previousPassword) {
-      setPreviousPasswordError("Enter password")
-      hasError = true
-    }
-
-    if (!password) {
-      setPasswordError("Enter password")
-      hasError = true
-    }
-
+    if (!previousPassword) { setPreviousPasswordError("Enter password"); hasError = true }
+    if (!password) { setPasswordError("Enter password"); hasError = true }
     if (previousPassword && password && previousPassword === password) {
       setPasswordError("New password cannot match previous password")
       hasError = true
     }
-
     if (hasError) return
-
     setConfirmOpen(true)
   }
 
@@ -60,16 +43,12 @@ export default function AdminSettingsPage() {
     setPasswordSaving(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user?.email) {
-        setPreviousPasswordError("Not authenticated")
-        return
-      }
+      if (!user?.email) { setPreviousPasswordError("Not authenticated"); return }
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: user.email,
         password: previousPassword,
       })
-
       if (signInError) {
         setPreviousPasswordError("Previous password is incorrect")
         setConfirmOpen(false)
@@ -77,66 +56,7 @@ export default function AdminSettingsPage() {
       }
 
       const { error } = await supabase.auth.updateUser({ password })
-      if (error) {
-        setPasswordError(error.message || "Failed to change password")
-        return
-      }
-
-      setPreviousPassword("")
-      setPassword("")
-      setConfirmOpen(false)
-      showSuccessToast()
-    } finally {
-      setPasswordSaving(false)
-    }
-  }
-
-  const changePassword = async () => {
-    setPreviousPasswordError("")
-    setPasswordError("")
-
-    let hasError = false
-
-    if (!previousPassword) {
-      setPreviousPasswordError("Enter password")
-      hasError = true
-    }
-
-    if (!password) {
-      setPasswordError("Enter password")
-      hasError = true
-    }
-
-    if (previousPassword && password && previousPassword === password) {
-      setPasswordError("New password cannot match previous password")
-      hasError = true
-    }
-
-    if (hasError) return
-
-    setPasswordSaving(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user?.email) {
-        setPreviousPasswordError("Not authenticated")
-        return
-      }
-
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: previousPassword,
-      })
-
-      if (signInError) {
-        setPreviousPasswordError("Previous password is incorrect")
-        return
-      }
-
-      const { error } = await supabase.auth.updateUser({ password })
-      if (error) {
-        setPasswordError(error.message || "Failed to change password")
-        return
-      }
+      if (error) { setPasswordError(error.message || "Failed to change password"); return }
 
       setPreviousPassword("")
       setPassword("")
@@ -150,173 +70,184 @@ export default function AdminSettingsPage() {
   const deleteAccount = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { error } = await supabase.from('users').delete().eq('id', user.id)
-    if (error) return alert('Failed to delete account')
+    const { error } = await supabase.from("users").delete().eq("id", user.id)
+    if (error) return alert("Failed to delete account")
     await supabase.auth.signOut()
     setDeleteOpen(false)
     setDeleteSuccessOpen(true)
-    setTimeout(() => {
-      setDeleteSuccessOpen(false)
-      window.location.replace('/')
-    }, 1500)
+    setTimeout(() => { setDeleteSuccessOpen(false); window.location.replace("/") }, 1500)
   }
 
   return (
-    <div className="text-[#1a1a1a]">
-      <div className="mb-5 px-1 md:px-2">
-        <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Account</p>
-        <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Settings</h1>
+    <div className="p-6 space-y-6">
+      {/* Page Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Account</p>
+          <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Settings</h1>
+        </div>
       </div>
 
-      <Card className="max-w-2xl rounded-[28px] border-[#ece4d7] bg-[#fbf7f1] shadow-[0_18px_50px_rgba(17,17,17,0.08)]">
-        <CardHeader className="border-b border-[#ece4d7] pb-6">
-          <CardTitle className="font-serif text-2xl text-[#111111]">Security</CardTitle>
+      {/* Change Password Card */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-[#111111]">Change Password</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Update your admin account password.</p>
+        </div>
 
-        </CardHeader>
-
-        <CardContent className="space-y-6 p-6 md:p-8">
-          <div className="grid gap-3 rounded-2xl bg-white p-4 shadow-sm">
-            <div>
-              <h3 className="font-semibold text-[#111111]">Change password</h3>
-            </div>
-
-            <div className="grid gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="admin-previous-password">Current password</Label>
-                <div className="relative">
-                  <Input
-                    id="admin-previous-password"
-                    type={showPreviousPassword ? "text" : "password"}
-                    value={previousPassword}
-                    onChange={(e) => {
-                      setPreviousPassword(e.target.value)
-                      if (previousPasswordError) setPreviousPasswordError("")
-                    }}
-                    className="h-12 rounded-xl border-[#ded3c1] bg-white pr-12"
-                    placeholder="Current password"
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-[#C8A96A]"
-                    onClick={() => setShowPreviousPassword((prev) => !prev)}
-                  >
-                    {showPreviousPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-                {previousPasswordError && (
-                  <p className="text-xs font-medium text-red-600">{previousPasswordError}</p>
-                )}
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="admin-password">New Password</Label>
-                <div className="relative">
-                  <Input
-                    id="admin-password"
-                    type={showNewPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value)
-                      if (passwordError) setPasswordError("")
-                    }}
-                    className="h-12 rounded-xl border-[#ded3c1] bg-white pr-12"
-                    placeholder="New password"
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-[#C8A96A]"
-                    onClick={() => setShowNewPassword((prev) => !prev)}
-                  >
-                    {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-                {passwordError && (
-                  <p className="text-xs font-medium text-red-600">{passwordError}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <Button
-                onClick={validateAndOpenConfirm}
-                disabled={passwordSaving}
-                className="h-12 rounded-full bg-[#111111] px-6 text-white hover:bg-[#222222]"
+        <div className="px-6 py-5 space-y-4 max-w-md">
+          <div className="space-y-1.5">
+            <label className="text-xs text-[#6B6B6B] font-medium">Current Password</label>
+            <div className="relative">
+              <input
+                type={showPreviousPassword ? "text" : "password"}
+                value={previousPassword}
+                onChange={(e) => { setPreviousPassword(e.target.value); if (previousPasswordError) setPreviousPasswordError("") }}
+                placeholder="Current password"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#C8A96A]/40 focus:border-[#C8A96A] transition"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPreviousPassword((p) => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#C8A96A] transition-colors"
               >
-                {passwordSaving ? "Changing..." : "Change"}
-              </Button>
+                {showPreviousPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
+            {previousPasswordError && <p className="text-xs text-red-500">{previousPasswordError}</p>}
           </div>
 
-          <div className="grid gap-3 rounded-2xl border border-red-100 bg-white p-4 shadow-sm">
-            <div>
-              <h3 className="font-semibold text-[#111111]">Delete Account</h3>
-              <p className="text-sm text-gray-500">Delete your account permanently.</p>
+          <div className="space-y-1.5">
+            <label className="text-xs text-[#6B6B6B] font-medium">New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); if (passwordError) setPasswordError("") }}
+                placeholder="New password"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#C8A96A]/40 focus:border-[#C8A96A] transition"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword((p) => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#C8A96A] transition-colors"
+              >
+                {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
-            <div className="flex gap-3">
-              <Button onClick={() => setDeleteOpen(true)} className="h-12 rounded-full bg-red-600 px-6 text-white hover:bg-red-700">
-                Delete Account
-              </Button>
-            </div>
+            {passwordError && <p className="text-xs text-red-500">{passwordError}</p>}
           </div>
-        </CardContent>
-      </Card>
 
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={validateAndOpenConfirm}
+              disabled={passwordSaving}
+              className="flex items-center gap-2 bg-[#C8A96A] hover:bg-[#b8935a] transition-colors px-4 py-2 rounded-lg text-white font-medium shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {passwordSaving ? "Changing..." : "Change Password"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Danger Zone Card */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-red-100">
+          <h2 className="text-base font-semibold text-red-600">Danger Zone</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Irreversible actions for your account.</p>
+        </div>
+        <div className="px-6 py-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-[#111111]">Delete Account</p>
+            <p className="text-sm text-gray-500">Permanently remove your profile and all data.</p>
+          </div>
+          <button
+            onClick={() => setDeleteOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+          >
+            <Trash2 size={14} />
+            Delete Account
+          </button>
+        </div>
+      </div>
+
+      {/* Success Toast */}
       {toastOpen && (
-        <div className="fixed right-6 top-6 z-50 w-[320px] rounded-2xl border border-emerald-200 bg-white p-4 shadow-[0_18px_50px_rgba(17,17,17,0.18)]">
-          <p className="text-sm font-semibold text-emerald-700">Success</p>
-          <p className="mt-1 text-sm text-gray-600">Your changes are saved successfully.</p>
+        <div className="fixed right-6 top-6 z-50 w-[300px] rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-lg">
+          <p className="text-sm font-semibold text-emerald-700">Password updated</p>
+          <p className="text-xs text-gray-500 mt-0.5">Your password has been changed successfully.</p>
         </div>
       )}
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="rounded-3xl border-[#ece4d7] bg-[#fffaf2] shadow-[0_18px_50px_rgba(17,17,17,0.16)]">
-          <DialogHeader>
-            <DialogTitle className="font-serif text-2xl text-[#111111]">Confirm change?</DialogTitle>
-            <DialogDescription className="text-gray-600">
-              This will update your admin password immediately.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)} className="rounded-full border-[#ded3c1] px-5">
-              Cancel
-            </Button>
-            <Button
-              onClick={confirmPasswordChange}
-              className="rounded-full bg-[#111111] px-5 text-white hover:bg-[#222222]"
-            >
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Confirm Dialog */}
+      {confirmOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-lg">
+            <h2 className="text-lg font-semibold text-[#111111]">Confirm Password Change</h2>
+            <p className="text-sm text-gray-500 mt-1">This will update your admin password immediately.</p>
+            <div className="flex gap-3 mt-6 justify-end">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmPasswordChange}
+                disabled={passwordSaving}
+                className="px-4 py-2 text-sm font-medium bg-[#C8A96A] hover:bg-[#b8935a] text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {passwordSaving ? "Saving..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="rounded-3xl border-[#ece4d7] bg-[#fffaf2] shadow-[0_18px_50px_rgba(17,17,17,0.16)]">
-          <DialogHeader>
-            <DialogTitle className="font-serif text-2xl text-[#111111]">Delete account?</DialogTitle>
-            <DialogDescription className="text-gray-600">
-              This will permanently remove your profile and all saved user data. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)} className="rounded-full border-[#ded3c1] px-5">
-              Cancel
-            </Button>
-            <Button
-              onClick={deleteAccount}
-              className="rounded-full bg-red-600 px-5 text-white hover:bg-red-700"
+      {/* Delete Dialog */}
+      {deleteOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 relative shadow-lg">
+            <button
+              onClick={() => setDeleteOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-lg"
             >
-              Delete account
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              x
+            </button>
+            <div className="flex justify-center mb-4">
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="text-red-500" size={24} strokeWidth={1.8} />
+              </div>
+            </div>
+            <h2 className="text-center text-lg font-semibold text-gray-800">Delete Account?</h2>
+            <p className="text-center text-sm text-gray-500 mt-2">
+              This will permanently remove your profile and all saved data. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setDeleteOpen(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteAccount}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-red-500 text-white hover:bg-red-600 transition-all shadow-sm"
+              >
+                <Trash2 size={14} />
+                Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* Delete Success */}
       {deleteSuccessOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-[320px] rounded-2xl bg-white p-6 text-center shadow-lg">
-            <h2 className="mb-2 text-lg font-semibold">Account Deleted!</h2>
-            <p className="text-sm text-gray-600">Redirecting to the landing page...</p>
+            <h2 className="mb-2 text-lg font-semibold">Account Deleted</h2>
+            <p className="text-sm text-gray-500">Redirecting to the landing page...</p>
           </div>
         </div>
       )}
