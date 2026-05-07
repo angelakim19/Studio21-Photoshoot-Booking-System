@@ -105,6 +105,7 @@ export function BookingStep3() {
   }
 
   updateBookingData({ date: selectedDate, time: "" })
+  setTimeSlots([])
 }
 
 useEffect(() => {
@@ -242,6 +243,7 @@ useEffect(() => {
  const fetchAvailability = async (selectedDate: Date) => {
   try {
     setLoadingSlots(true)
+    setTimeSlots([])
 
     const duration = toNumericDuration(bookingData.duration)
     console.log("duration:", duration)

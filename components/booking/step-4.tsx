@@ -397,8 +397,8 @@ export function BookingStep4() {
         <div className="text-sm">
           <p className="font-semibold text-amber-800">Cancellation Policy</p>
           <p className="text-amber-700 mt-1">
-            Free cancellation up to 24 hours before your appointment. 
-            Cancellations within 24 hours may be subject to a fee.
+            Appointments are non-cancellable once booked. 
+            If you wish to request a cancellation or rescheduling, please visit the studio directly for assistance.
           </p>
         </div>
       </div>
