@@ -120,13 +120,35 @@ const MAKEUP_ONLY_PRICE_PER_PERSON = 1200 // matches makeup_services.price_per_p
 const MAKEUP_ONLY_DURATION_MIN = 60       // 1 hour flat
 
 /**
- * Parse a DB timestamp string as LOCAL time.
- * Strips UTC markers ("Z", "+HH:MM") so JavaScript interprets it as local.
- * Handles both "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DDTHH:MM:SS" formats.
+ * Extract hours and minutes directly from a DB timestamp string.
+ *
+ * Timestamps may be stored as:
+ *   "2026-05-29T09:00:00+08:00"  — extract "09" and "00" directly
+ *   "2026-05-29 09:00:00"        — extract "09" and "00" directly
+ *   "2026-05-29T09:00:00Z"       — extract "09" and "00" directly
+ *
+ * We NEVER use Date.getHours() because that converts to the browser's
+ * local timezone, which may not match the stored timezone and produces
+ * wrong minutes-since-midnight values for the overlap check.
+ *
+ * Returns { hours, minutes } of the wall-clock time AS WRITTEN in the string.
+ */
+function extractStoredHHMM(raw: string): { hours: number; minutes: number } {
+  // Matches: YYYY-MM-DD HH:MM or YYYY-MM-DDTHH:MM (with optional seconds/offset)
+  const m = raw.trim().match(/^\d{4}-\d{2}-\d{2}[T ]( \d{2}):(\d{2})/)?.[0]
+  // More robust: just grab the time part between the date separator and any suffix
+  const parts = raw.trim().match(/[T ](\d{2}):(\d{2})/)
+  if (!parts) return { hours: 0, minutes: 0 }
+  return { hours: Number(parts[1]), minutes: Number(parts[2]) }
+}
+
+/**
+ * Parse a DB timestamp string as LOCAL time (for Date comparisons only).
+ * Strip timezone suffix so JS treats it as local — used only where a real
+ * Date object is needed (e.g. toDateString() comparisons in admin blocks).
  */
 function parseLocalDatetime(raw: string): Date {
-  // Normalise: replace space separator, strip timezone suffix
-  const normalised = raw.replace(" ", "T").replace(/([+-]\d{2}:\d{2}|Z)$/, "")
+  const normalised = raw.trim().replace(" ", "T").replace(/([+-]\d{2}:\d{2}|Z)$/, "")
   return new Date(normalised)
 }
 
@@ -200,20 +222,33 @@ function getBlockReason(dateStr: string, rows: BlockedDateRow[]): string {
  * DB column type: timestamp without time zone  → use LOCAL time strings, no UTC.
  */
 export async function fetchBookingsByDate(dateStr: string): Promise<ExistingBooking[]> {
-  // Build start-of-day and end-of-day boundaries in local time
-  const startOfDay = new Date(`${dateStr}T00:00:00`)
-  const endOfDay   = new Date(`${dateStr}T23:59:59`)
+  // Use plain local datetime strings — no timezone suffix.
+  // The bookings column is "timestamp without time zone", so PostgreSQL compares
+  // the stored wall-clock values directly. Adding a +HH:MM offset would cause
+  // the DB to either reject the comparison or silently shift the window, which
+  // makes bookings appear missing and allows double-booking.
+  //
+  // Overlap condition (Allen's interval algebra — half-open intervals):
+  //   existing.start_datetime < end_of_day  AND  existing.end_datetime > start_of_day
+  //
+  // We set end_of_day to the start of the NEXT day (exclusive) so a booking
+  // that runs up to exactly 23:00 or later is always included.
+  const startOfDay = `${dateStr} 00:00:00`
 
-  const startStr = toLocalDatetimeString(startOfDay) // "YYYY-MM-DD 00:00:00"
-  const endStr   = toLocalDatetimeString(endOfDay)   // "YYYY-MM-DD 23:59:59"
+  // Compute the next calendar day for the exclusive upper bound
+  const [y, mo, d] = dateStr.split("-").map(Number)
+  const nextDay = new Date(y, mo - 1, d + 1)
+  const pad     = (n: number) => String(n).padStart(2, "0")
+  const nextDayStr = `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}`
+  const startOfNextDay = `${nextDayStr} 00:00:00`
 
   const { data, error } = await supabase
     .from("bookings")
     .select("id, start_datetime, end_datetime")
-    // ✅ OVERLAP QUERY: existing.start < endOfDay AND existing.end > startOfDay
-    .lt("start_datetime", endStr)
-    .gt("end_datetime",   startStr)
-    // ✅ Only active bookings block slots
+    // OVERLAP QUERY: existing.start < startOfNextDay AND existing.end > startOfDay
+    .lt("start_datetime", startOfNextDay)
+    .gt("end_datetime",   startOfDay)
+    // Only active bookings block slots — cancelled frees up the time
     .in("status", ["approved", "pending"])
 
   if (error) {
@@ -241,8 +276,11 @@ export function generateTimeSlots(dateStr: string): string[] {
   const dow   = new Date(`${dateStr}T00:00:00`).getDay()
   const hours = STUDIO_HOURS[dow]
   const slots: string[] = []
-  // Start at open hour, end before close hour (close is exclusive)
-  for (let h = hours.open; h < hours.close; h++) {
+  // Generate ALL slots from open up to AND INCLUDING close.
+  // isValidStartTime will mark slots that exceed the closing time as
+  // "outside-hours" — this way every possible start time is represented
+  // and filtered correctly based on the selected duration.
+  for (let h = hours.open; h <= hours.close; h++) {
     slots.push(fmtHHMM(h * 60))
   }
   return slots
@@ -333,14 +371,17 @@ function buildSlotStatuses(
     }
 
     if (r.blocked_start && r.blocked_end) {
-      const bs = parseLocalDatetime(r.blocked_start)
-      const be = parseLocalDatetime(r.blocked_end)
-      const sameDay = bs.toDateString() === be.toDateString()
+      const bsDate = parseLocalDatetime(r.blocked_start)
+      const beDate = parseLocalDatetime(r.blocked_end)
+      const sameDay = bsDate.toDateString() === beDate.toDateString()
 
       // If the range spans multiple days, block the whole target day
+      // Use extractStoredHHMM to avoid browser-timezone conversion issues
+      const bsHHMM = extractStoredHHMM(r.blocked_start)
+      const beHHMM = extractStoredHHMM(r.blocked_end)
       adminIntervals.push(
         sameDay
-          ? { start: bs.getHours() * 60 + bs.getMinutes(), end: be.getHours() * 60 + be.getMinutes() }
+          ? { start: bsHHMM.hours * 60 + bsHHMM.minutes, end: beHHMM.hours * 60 + beHHMM.minutes }
           : { start: 0, end: 24 * 60 }
       )
     }
@@ -354,15 +395,12 @@ function buildSlotStatuses(
     // Skip the booking being edited
     if (currentBookingId != null && String(bk.id) === String(currentBookingId)) continue
 
-    const bs = parseLocalDatetime(bk.start_datetime)
-    const be = parseLocalDatetime(bk.end_datetime)
-
-    // Convert to minutes-since-midnight for the target date.
-    // Because fetchBookingsByDate uses overlap query, these bookings are
-    // guaranteed to touch the target date even if they started the day before.
-    // We clamp to [0, 24*60] so cross-midnight bookings still block correctly.
-    const bsMin = bs.getHours() * 60 + bs.getMinutes()
-    const beMin = be.getHours() * 60 + be.getMinutes()
+    // Extract hours/minutes directly from the stored string — never use
+    // getHours() which converts to the browser timezone and can be wrong.
+    const bsHHMM = extractStoredHHMM(bk.start_datetime)
+    const beHHMM = extractStoredHHMM(bk.end_datetime)
+    const bsMin  = bsHHMM.hours * 60 + bsHHMM.minutes
+    const beMin  = beHHMM.hours * 60 + beHHMM.minutes
 
     // Handle case where booking ends exactly at midnight (beMin === 0 means full day)
     bookedIntervals.push({
@@ -653,6 +691,10 @@ export default function EditAppointmentDialog({
   const [slotStatuses, setSlotStatuses] = useState<Record<string, SlotStatus>>({})
   const [loadingData,  setLoadingData]  = useState(false)
 
+  // Guard: if form is not yet provided, render nothing.
+  // All hooks must be called before this check (Rules of Hooks).
+  const formReady = !!form
+
   // ── Fetch blocked dates once when dialog opens ─────────────────────────────
   useEffect(() => {
     if (!open) return
@@ -667,46 +709,48 @@ export default function EditAppointmentDialog({
   // ── Fetch bookings whenever dialog opens OR selected date changes ──────────
   //    Uses overlap-based query via fetchBookingsByDate helper.
   //    Dependency array: [open, form.date] — refetches on every date change.
+  const formDate = form?.date ?? ""
+
   useEffect(() => {
-    if (!open || !form.date) return
+    if (!open || !formDate) return
 
     setLoadingData(true)
 
-    fetchBookingsByDate(form.date)
+    fetchBookingsByDate(formDate)
       .then(bookings => {
         setAllBookings(bookings)
       })
       .finally(() => {
         setLoadingData(false)
       })
-  }, [open, form.date]) // ✅ Refetches when date changes
+  }, [open, formDate]) // ✅ Refetches when date changes
 
   // ── Derived durations ──────────────────────────────────────────────────────
-  const isStudioRental   = form.service === "studio_rental"
-  const isPhotoshoot     = isPhotoshootSvc(form.service)
-  const isMakeupOnly     = isMakeupOnlySvc(form.service)
+  const isStudioRental   = form?.service === "studio_rental"
+  const isPhotoshoot     = isPhotoshootSvc(form?.service ?? "")
+  const isMakeupOnly     = isMakeupOnlySvc(form?.service ?? "")
 
   // Makeup add-on adds 1 hour per person before the main session
-  const makeupExtraMin  = isStudioRental && form.addons.makeup ? (form.makeupPeople ?? 1) * 60 : 0
+  const makeupExtraMin  = isStudioRental && form?.addons?.makeup ? (form.makeupPeople ?? 1) * 60 : 0
   const baseDurationMin = isStudioRental
-    ? (form.studioHours ?? 1) * 60
+    ? (form?.studioHours ?? 1) * 60
     : isPhotoshoot
-      ? (form.photoshootSets ?? 1) * 120
+      ? (form?.photoshootSets ?? 1) * 120
       : isMakeupOnly
-        ? (form.makeupOnlyPeople ?? 1) * MAKEUP_ONLY_DURATION_MIN
-        : form.duration
+        ? (form?.makeupOnlyPeople ?? 1) * MAKEUP_ONLY_DURATION_MIN
+        : (form?.duration ?? 0)
   const totalDurationMin = baseDurationMin + makeupExtraMin
-  const endTime = form.time ? fmtHHMM(toMin(form.time) + totalDurationMin) : ""
+  const endTime = form?.time ? fmtHHMM(toMin(form.time) + totalDurationMin) : ""
 
   // ── Rebuild slot statuses whenever inputs change ───────────────────────────
   useEffect(() => {
-    if (!form.date || totalDurationMin <= 0) {
+    if (!formDate || totalDurationMin <= 0) {
       setSlotStatuses({})
       return
     }
 
     const statuses = buildSlotStatuses(
-      form.date,
+      formDate,
       totalDurationMin,
       blockedRows,
       allBookings,
@@ -724,29 +768,29 @@ export default function EditAppointmentDialog({
       return prev
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.date, totalDurationMin, blockedRows, allBookings, bookingId])
+  }, [formDate, totalDurationMin, blockedRows, allBookings, bookingId])
 
   // ── Pricing ───────────────────────────────────────────────────────────────
   let basePrice = 0
   if (isStudioRental) {
-    const opt = STUDIO_RENTAL_OPTIONS.find(o => o.hours === (form.studioHours ?? 1))
-    if (opt) basePrice = form.studioBackdrop ? opt.priceBackdrop : opt.priceBasic
+    const opt = STUDIO_RENTAL_OPTIONS.find(o => o.hours === (form?.studioHours ?? 1))
+    if (opt) basePrice = form?.studioBackdrop ? opt.priceBackdrop : opt.priceBasic
   } else if (isPhotoshoot) {
-    const pkg = PHOTOSHOOT_PACKAGES.find(p => p.value === form.service)
-    if (pkg) basePrice = pkg.prices[form.photoshootSets ?? 1] ?? 0
+    const pkg = PHOTOSHOOT_PACKAGES.find(p => p.value === form?.service)
+    if (pkg) basePrice = pkg.prices[form?.photoshootSets ?? 1] ?? 0
   } else if (isMakeupOnly) {
-    basePrice = (form.makeupOnlyPeople ?? 1) * MAKEUP_ONLY_PRICE_PER_PERSON
+    basePrice = (form?.makeupOnlyPeople ?? 1) * MAKEUP_ONLY_PRICE_PER_PERSON
   }
   const addonsPrice = isStudioRental
-    ? (form.addons.photographer ? ADDON_PHOTOGRAPHER_PRICE : 0)
-      + (form.addons.makeup ? (form.makeupPeople ?? 1) * ADDON_MAKEUP_PRICE_PER_PERSON : 0)
+    ? (form?.addons?.photographer ? ADDON_PHOTOGRAPHER_PRICE : 0)
+      + (form?.addons?.makeup ? (form.makeupPeople ?? 1) * ADDON_MAKEUP_PRICE_PER_PERSON : 0)
     : 0
   const totalPrice = basePrice + addonsPrice
 
-  const selectedStudioOpt = STUDIO_RENTAL_OPTIONS.find(o => o.hours === (form.studioHours ?? 1))
-  const selectedPkg       = PHOTOSHOOT_PACKAGES.find(p => p.value === form.service)
+  const selectedStudioOpt = STUDIO_RENTAL_OPTIONS.find(o => o.hours === (form?.studioHours ?? 1))
+  const selectedPkg       = PHOTOSHOOT_PACKAGES.find(p => p.value === form?.service)
 
-  if (!open) return null
+  if (!open || !formReady) return null
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 overflow-y-auto py-4">
@@ -968,6 +1012,30 @@ export default function EditAppointmentDialog({
           </div>
 
           <div className="p-3.5 space-y-3">
+            {/* ─ Studio Hours Reference ─ */}
+            <div className="rounded-xl border border-[#C8A96A]/25 bg-[#C8A96A]/5 px-3 py-2.5">
+              <p className="text-[10px] font-bold text-[#C8A96A] uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                🕐 Studio Hours
+              </p>
+              <div className="grid grid-cols-1 gap-0.5 text-[11px]">
+                {[
+                  { label: "Mon – Fri", days: [1,2,3,4,5] },
+                  { label: "Saturday",  days: [6] },
+                  { label: "Sunday",    days: [0] },
+                ].map(({ label, days }) => {
+                  const h = STUDIO_HOURS[days[0]]
+                  return (
+                    <div key={label} className="flex justify-between items-center py-0.5">
+                      <span className="text-[#6B6B6B] font-medium">{label}</span>
+                      <span className="font-semibold text-[#1A1A1A]">
+                        {fmtAMPM(fmtHHMM(h.open * 60))} – {fmtAMPM(fmtHHMM(h.close * 60))}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* ─ Calendar ─ */}
             <div>
               <p className="text-xs font-semibold text-[#6B6B6B] uppercase tracking-wide mb-2">Select Date</p>
@@ -1149,7 +1217,18 @@ export default function EditAppointmentDialog({
               !form.date ||
               !form.time ||
               isDateBlocked(form.date, blockedRows) ||
-              slotStatuses[form.time] !== "available"
+              // Check every hour slot in the booking window — not just the start.
+              // This prevents saving when the range spans into a booked slot.
+              (() => {
+                if (!form.time || totalDurationMin <= 0) return true
+                const startM = toMin(form.time)
+                const endM   = startM + totalDurationMin
+                for (let m = startM; m < endM; m += 60) {
+                  const st = slotStatuses[fmtHHMM(m)]
+                  if (st && st !== "available") return true
+                }
+                return false
+              })()
             }
             className="px-4 py-2 bg-[#C8A96A] text-black rounded-lg hover:opacity-85 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm transition-opacity"
           >

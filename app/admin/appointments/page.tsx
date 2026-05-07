@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Pencil, Trash2, Plus, Search, ChevronDown } from "lucide-react"
+import { Pencil, Trash2, Plus, Search, ChevronDown, CalendarDays } from "lucide-react"
 import EditAppointmentDialog from "@/components/admin/EditAppointmentDialog"
 import DeleteConfirmModal from "@/components/admin/DeleteConfirmModal"
 import { supabase } from "@/lib/supabaseClient"
@@ -468,10 +468,14 @@ const PHOTOSHOOT_SLUG_TO_NAME: Record<string, string> = {
 }
 
 function toLocalDtString(d: Date): string {
+  // Use plain "YYYY-MM-DD HH:MM:SS" with NO timezone suffix.
+  // The bookings table uses "timestamp without time zone", so PostgreSQL
+  // stores and compares wall-clock values as-is. Appending +08:00 causes
+  // the DB to shift the comparison window and silently miss conflicts.
   const p = (n: number) => String(n).padStart(2, "0")
   return (
-    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T` +
-    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}+08:00`
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
   )
 }
 
@@ -863,101 +867,151 @@ function AppointmentTable({
   }
 
   return (
-    <div className="bg-white rounded-xl shadow overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       {isAdmin && selected.length > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-red-50 border-b text-sm">
-          <span className="text-red-600 font-medium">{selected.length} selected</span>
-          <button
-            onClick={() => openDeleteModal([...selected])}
-            className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-          ><Trash2 size={14} /> Delete Selected</button>
-          <button onClick={() => setSelected([])} className="text-gray-500 hover:text-gray-700 underline">Clear</button>
+        <div className="flex items-center gap-3 px-5 py-3 bg-red-50 border-b border-red-100 text-sm">
+          <span className="text-red-600 font-semibold">{selected.length} selected</span>
+          <div className="flex gap-2 ml-1">
+            <button
+              onClick={() => openDeleteModal([...selected])}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors shadow-sm"
+            ><Trash2 size={13} /> Delete Selected</button>
+            <button onClick={() => setSelected([])} className="text-gray-400 hover:text-gray-600 text-xs underline underline-offset-2 transition-colors">Clear</button>
+          </div>
         </div>
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="p-3 w-10">
-                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="rounded" />
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50/70">
+              <th className="pl-5 pr-3 py-3.5 w-10">
+                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll}
+                  className="rounded border-gray-300 text-[#C8A96A] focus:ring-[#C8A96A]/30 cursor-pointer" />
               </th>
-              <th className="p-3 text-left font-semibold text-gray-600">ID</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Client</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Date</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Time</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Service</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Price</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Payment Reference</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Payment Method</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Status</th>
-              <th className="p-3 text-left font-semibold text-gray-600">Actions</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">ID</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Client</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Date & Time</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Service</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Price</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Payment Method</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Reference</th>
+              <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400">Status</th>
+              <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-400 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-gray-50">
             {paginatedData.length === 0 ? (
-              <tr><td colSpan={11} className="p-10 text-center text-gray-400">No appointments found.</td></tr>
+              <tr>
+                <td colSpan={10} className="py-16 text-center text-gray-400 text-sm">
+                  No appointments found.
+                </td>
+              </tr>
             ) : (
-              paginatedData.map((app) => (
-                <tr key={app.id} className={`border-t transition-colors ${selected.includes(app.id) ? "bg-amber-50" : "hover:bg-gray-50"}`}>
-                  <td className="p-3">
-                    <input type="checkbox" checked={selected.includes(app.id)} onChange={() => toggleSelect(app.id)} className="rounded" />
-                  </td>
-                  <td className="p-3 text-gray-600">#{app.id}</td>
-                  <td className="p-3 font-medium">{app.name}</td>
-                  <td className="p-3 text-gray-600">
-                    {app.date
-                      ? new Date(`${app.date}T00:00:00`).toLocaleDateString("en-PH", {
-                          weekday: "short", month: "short", day: "numeric", year: "numeric",
-                        })
-                      : "—"}
-                  </td>
-                  <td className="p-3 text-gray-600">
-                    {app.time
-                      ? (() => {
-                          const fmt = (hhmm: string) => {
-                            const [h, m] = hhmm.split(":").map(Number)
-                            return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
-                          }
-                          return `${fmt(app.time)} – ${fmt(getEndTime(app.time, app.duration))}`
-                        })()
-                      : "—"}
-                  </td>
-                  <td className="p-3 text-gray-700">{app.service}</td>
-                  <td className="p-3 font-semibold text-[#C8A96A]">₱{app.totalPrice.toLocaleString()}</td>
-                  <td className="p-3 text-gray-600">{app.paymentReference || "-"}</td>
-                  <td className="p-3 text-gray-600 capitalize">{app.paymentMethod?.replace(/_/g, " ") || "-"}</td>
-                  <td className="p-3">
-                    {isAdmin ? (
-                      <select value={app.status} onChange={(e) => onStatusChange(app.id, e.target.value as Status)}
-                        className={`text-xs font-semibold px-3 py-1 rounded-full border-0 outline-none cursor-pointer appearance-none ${statusStyles[app.status]}`}>
-                        <option value="approved">Approved</option>
-                        <option value="pending">Pending</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    ) : (
-                      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${statusStyles[app.status]}`}>
-                        {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3">
-                    {isAdmin ? (
-                      <div className="flex gap-3">
-                        <button onClick={() => onEdit(app)} className="text-[#C8A96A] hover:text-[#b8935a] transition-colors" title="Edit"><Pencil size={16} /></button>
-                        <button onClick={() => openDeleteModal([app.id])} className="text-red-400 hover:text-red-600 transition-colors" title="Delete"><Trash2 size={16} /></button>
-                      </div>
-                    ) : (
-                      <span className="text-gray-300 text-xs">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))
+              paginatedData.map((app) => {
+                const fmt = (hhmm: string) => {
+                  const [h, m] = hhmm.split(":").map(Number)
+                  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`
+                }
+                return (
+                  <tr key={app.id} className={`group transition-colors ${selected.includes(app.id) ? "bg-amber-50/60" : "hover:bg-gray-50/80"}`}>
+                    {/* Checkbox */}
+                    <td className="pl-5 pr-3 py-3.5">
+                      <input type="checkbox" checked={selected.includes(app.id)} onChange={() => toggleSelect(app.id)}
+                        className="rounded border-gray-300 text-[#C8A96A] focus:ring-[#C8A96A]/30 cursor-pointer" />
+                    </td>
+
+                    {/* ID */}
+                    <td className="px-4 py-3.5 text-gray-400 text-xs font-mono">#{app.id}</td>
+
+                    {/* Client */}
+                    <td className="px-4 py-3.5">
+                      <p className="font-semibold text-gray-800 leading-tight">{app.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{app.email || "—"}</p>
+                    </td>
+
+                    {/* Date & Time */}
+                    <td className="px-4 py-3.5">
+                      {app.date ? (
+                        <>
+                          <p className="font-medium text-gray-800">
+                            {new Date(`${app.date}T00:00:00`).toLocaleDateString("en-PH", {
+                              weekday: "short", month: "short", day: "numeric", year: "numeric",
+                            })}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {app.time ? `${fmt(app.time)} – ${fmt(getEndTime(app.time, app.duration))}` : "—"}
+                          </p>
+                        </>
+                      ) : <span className="text-gray-400">—</span>}
+                    </td>
+
+                    {/* Service */}
+                    <td className="px-4 py-3.5 max-w-[180px]">
+                      <span className="text-gray-700 leading-snug line-clamp-2">{app.service || "—"}</span>
+                    </td>
+
+                    {/* Price */}
+                    <td className="px-4 py-3.5">
+                      <span className="font-bold text-[#C8A96A]">₱{app.totalPrice.toLocaleString()}</span>
+                    </td>
+
+                    {/* Payment Method */}
+                    <td className="px-4 py-3.5 text-gray-500 capitalize">
+                      {app.paymentMethod?.replace(/_/g, " ") || "—"}
+                    </td>
+
+                    {/* Payment Reference */}
+                    <td className="px-4 py-3.5 text-gray-500 font-mono text-xs tracking-wide">
+                      {app.paymentReference || "—"}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-4 py-3.5">
+                      {isAdmin ? (
+                        <select
+                          value={app.status}
+                          onChange={(e) => onStatusChange(app.id, e.target.value as Status)}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-full border-0 outline-none cursor-pointer appearance-none ${statusStyles[app.status]}`}
+                        >
+                          <option value="approved">Approved</option>
+                          <option value="pending">Pending</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      ) : (
+                        <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${statusStyles[app.status]}`}>
+                          {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-5 py-3.5">
+                      {isAdmin ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button onClick={() => onEdit(app)} title="Edit"
+                            className="p-2 rounded-lg text-gray-400 hover:text-[#C8A96A] hover:bg-amber-50 transition-all">
+                            <Pencil size={15} />
+                          </button>
+                          <button onClick={() => openDeleteModal([app.id])} title="Delete"
+                            className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
       </div>
-      <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+      <div className="border-t border-gray-100 px-5 py-3">
+        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+      </div>
 
       <DeleteConfirmModal
         open={deleteModal.open}
@@ -1140,7 +1194,10 @@ export default function AppointmentsPage() {
         <div>
           <p className="text-sm uppercase tracking-[0.28em] text-[#8f7a53]">Management</p>
           <h1 className="font-serif text-3xl font-semibold text-[#111111] md:text-4xl">Appointments</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{counts.all} total appointments</p>
+          <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5">
+            <CalendarDays size={13} className="text-gray-500" />
+            <span>{counts.all} total appointments</span>
+          </p>
         </div>
         {isAdmin && (
           <button onClick={openAdd}
@@ -1198,8 +1255,9 @@ export default function AppointmentsPage() {
       )}
 
       {loading ? (
-        <div className="bg-white rounded-xl shadow p-12 text-center text-gray-400 text-sm animate-pulse">
-          Loading appointments…
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-2 border-[#C8A96A] border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-400">Loading appointments…</p>
         </div>
       ) : (
         <AppointmentTable
