@@ -80,19 +80,12 @@ export async function POST(req: NextRequest) {
     const rawNotes   = booking.notes ?? ""
     const humanNotes = rawNotes.replace(/^__meta__:\{.*?\}\n?/s, "").trim()
 
-    // Convert UTC datetimes from Supabase to Asia/Manila local ISO strings.
-    // Passing a UTC offset string (e.g. "...+00:00") together with timeZone
-    // causes Google Calendar to double-shift by +8 hrs. Converting to a plain
-    // local wall-clock string (no offset suffix) fixes the mismatch.
-    const toManilaLocal = (utcIso: string) => {
-      const d = new Date(utcIso)
-      return new Intl.DateTimeFormat("sv-SE", {
-        timeZone: "Asia/Manila",
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", second: "2-digit",
-        hour12: false,
-      }).format(d).replace(" ", "T")
-    }
+    // The stored datetime strings (e.g. "2026-06-14 09:00:00") have no timezone
+    // suffix, so new Date() would wrongly treat them as UTC and shift +8 hrs.
+    // We strip any existing offset, then re-append +08:00 so Google Calendar
+    // receives the correct PH wall-clock time without any double-shift.
+    const toManilaIso = (raw: string): string =>
+      raw.replace(" ", "T").replace(/([+-]\d{2}:\d{2}|Z)$/, "") + "+08:00"
 
     const eventBody = {
       summary:     `📷 ${clientName} — ${serviceLabel}`,
@@ -104,8 +97,8 @@ export async function POST(req: NextRequest) {
         email,
         humanNotes ? `Notes: ${humanNotes}` : "",
       ].filter(Boolean).join("\n"),
-      start: { dateTime: toManilaLocal(booking.start_datetime), timeZone: "Asia/Manila" },
-      end:   { dateTime: toManilaLocal(booking.end_datetime),   timeZone: "Asia/Manila" },
+      start: { dateTime: toManilaIso(booking.start_datetime), timeZone: "Asia/Manila" },
+      end:   { dateTime: toManilaIso(booking.end_datetime),   timeZone: "Asia/Manila" },
       colorId: "2", // green
     }
 

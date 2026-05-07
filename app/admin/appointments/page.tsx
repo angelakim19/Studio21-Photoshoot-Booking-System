@@ -124,12 +124,6 @@ const getBookingServiceSlug = (row: any) => {
 }
 
 // ─── Meta encoding/decoding ───────────────────────────────────────────────────
-// All booking config (add-ons, studio options, etc.) is stored as a JSON block
-// at the top of the notes column so we never need add_ons / booking_addons /
-// makeup_services / packages / package_variations / studio_rental_options /
-// services joins for reading back booking details.
-//
-// Format:  __meta__:{"photographer":true,...}\nOptional human notes
 
 function parseMeta(raw: string | null): {
   photographer: boolean
@@ -181,10 +175,8 @@ function buildNotes(
 
 // ─── Supabase data helpers ────────────────────────────────────────────────────
 
-/** Parse a DB datetime string as LOCAL (PH) time — strips any UTC/timezone suffix */
 function parseLocalDt(raw: string | null | undefined): Date | null {
   if (!raw) return null
-  // Strip timezone suffix so JS treats it as local time, not UTC
   const normalized = raw.replace(" ", "T").replace(/([+-]\d{2}:\d{2}|Z)$/, "")
   return new Date(normalized)
 }
@@ -193,7 +185,6 @@ function mapRow(row: any): Appointment {
   const startDt = parseLocalDt(row.start_datetime)
   const endDt   = parseLocalDt(row.end_datetime)
 
-  // Extract date and time from local Date (not UTC)
   const pad = (n: number) => String(n).padStart(2, "0")
   const date = startDt
     ? `${startDt.getFullYear()}-${pad(startDt.getMonth() + 1)}-${pad(startDt.getDate())}`
@@ -212,42 +203,27 @@ function mapRow(row: any): Appointment {
   const firstName = row.users?.first_name ?? ""
   const lastName  = row.users?.last_name  ?? ""
 
-  // package_name_snapshot stores the service slug
-  // Slugs: "studio_rental" | "pkg_a" | "pkg_b" | "pkg_c"
   const serviceSlug = getBookingServiceSlug(row)
 
   const SERVICE_LABELS: Record<string, string> = {
-    // admin slugs
     studio_rental: "Studio Rental",
     pkg_a: "Package A – Indoor Set Design",
     pkg_b: "Package B – Plain Background",
     pkg_c: "Package C – Outdoor Shoot",
-
-    // user-side labels
     "Package A — Indoor Set Design": "Package A – Indoor Set Design",
     "Package B — Plain Background": "Package B – Plain Background",
     "Package C — Outdoor Shoot": "Package C – Outdoor Shoot",
-
-    // makeup
     "Natural/Everyday Look": "Natural/Everyday Look",
     "Glamour/Evening": "Glamour/Evening",
     "Bridal Makeup": "Bridal Makeup",
-
-    // studio rental packages
     "1 Hour — Basic Setup": "1 Hour — Basic Setup",
     "1 Hour — With Backdrop": "1 Hour — With Backdrop",
-
     "2 Hours — Basic Setup": "2 Hours — Basic Setup",
     "2 Hours — With Backdrop": "2 Hours — With Backdrop",
-
     "3 Hours — Basic Setup": "3 Hours — Basic Setup",
     "3 Hours — With Backdrop": "3 Hours — With Backdrop",
-
-    "Half Day (4 hrs) — With Backdrop":
-      "Half Day (4 hrs) — With Backdrop",
-
-    "Full Day (8 hrs) — With Backdrop":
-      "Full Day (8 hrs) — With Backdrop",
+    "Half Day (4 hrs) — With Backdrop": "Half Day (4 hrs) — With Backdrop",
+    "Full Day (8 hrs) — With Backdrop": "Full Day (8 hrs) — With Backdrop",
   }
 
   const serviceLabel = SERVICE_LABELS[serviceSlug] || getBookingServiceLabel(row)
@@ -284,6 +260,11 @@ function mapRow(row: any): Appointment {
 }
 
 async function fetchBookings(): Promise<Appointment[]> {
+  // OPTIMIZATION: Only fetch appointments from the last 30 days + future
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const fromDateStr = thirtyDaysAgo.toISOString();
+
   const { data, error } = await supabase
     .from("bookings")
     .select(`
@@ -301,7 +282,9 @@ async function fetchBookings(): Promise<Appointment[]> {
       users ( first_name, last_name, email, phone ),
       payments ( payment_method, payment_reference, created_at )
     `)
+    .gte("start_datetime", fromDateStr) // Filter old data
     .order("start_datetime", { ascending: false })
+    .limit(500) // Hard cap for safety
 
   if (error) {
     console.error("fetchBookings:", error.message)
@@ -352,12 +335,11 @@ async function deleteBookingFromDb(id: number): Promise<boolean> {
     return true
   }
 
-  // Remove Google Calendar event if one exists
   await fetch("/api/calendar/sync", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ bookingId: id, action: "delete" }),
-  }).catch(() => {}) // non-fatal if calendar API fails
+  }).catch(() => {}) 
 
   const {
     data: { session },
@@ -383,7 +365,6 @@ async function deleteBookingFromDb(id: number): Promise<boolean> {
     return await deleteDirectly()
   }
 
-  // Verify API delete actually removed row from DB
   const { data: verifyRow, error: verifyError } = await supabase
     .from("bookings")
     .select("id")
@@ -398,9 +379,7 @@ async function deleteBookingFromDb(id: number): Promise<boolean> {
 }
 
 // ─── Relational table helpers ─────────────────────────────────────────────────
-// These resolve IDs from the reference tables so we can write proper foreign keys.
 
-/** Returns the service_id for a given service name (e.g. "Studio Rental") */
 async function resolveServiceId(serviceName: string): Promise<number | null> {
   const { data } = await supabase
     .from("services")
@@ -411,7 +390,6 @@ async function resolveServiceId(serviceName: string): Promise<number | null> {
   return data?.id ?? null
 }
 
-/** Returns the package id for a slug like "pkg_a" by matching the name snapshot */
 async function resolvePackageId(serviceId: number, packageName: string): Promise<number | null> {
   const { data } = await supabase
     .from("packages")
@@ -423,7 +401,6 @@ async function resolvePackageId(serviceId: number, packageName: string): Promise
   return data?.id ?? null
 }
 
-/** Returns the package_variation id for a given package + number_of_sets */
 async function resolvePackageVariationId(packageId: number, numberOfSets: number): Promise<number | null> {
   const { data } = await supabase
     .from("package_variations")
@@ -435,7 +412,6 @@ async function resolvePackageVariationId(packageId: number, numberOfSets: number
   return data?.id ?? null
 }
 
-/** Returns the studio_rental_option id matching service + duration type */
 async function resolveStudioRentalOptionId(serviceId: number, duration: string): Promise<number | null> {
   const { data } = await supabase
     .from("studio_rental_options")
@@ -447,7 +423,6 @@ async function resolveStudioRentalOptionId(serviceId: number, duration: string):
   return data?.id ?? null
 }
 
-/** Returns the makeup_service id for the Studio Rental service */
 async function resolveMakeupServiceId(serviceId: number): Promise<number | null> {
   const { data } = await supabase
     .from("makeup_services")
@@ -458,7 +433,6 @@ async function resolveMakeupServiceId(serviceId: number): Promise<number | null>
   return data?.id ?? null
 }
 
-/** Returns the add_on id for Photographer by name */
 async function resolvePhotographerAddonId(): Promise<number | null> {
   const { data } = await supabase
     .from("add_ons")
@@ -469,7 +443,6 @@ async function resolvePhotographerAddonId(): Promise<number | null> {
   return data?.id ?? null
 }
 
-/** Returns the add_on id for Makeup/Hair by name */
 async function resolveMakeupAddonId(): Promise<number | null> {
   const { data } = await supabase
     .from("add_ons")
@@ -480,7 +453,6 @@ async function resolveMakeupAddonId(): Promise<number | null> {
   return data?.id ?? null
 }
 
-// Duration label mappings for studio_rental_options
 const STUDIO_HOURS_TO_DURATION: Record<number, string> = {
   1: "1 Hour",
   2: "2 Hours",
@@ -495,16 +467,15 @@ const PHOTOSHOOT_SLUG_TO_NAME: Record<string, string> = {
   pkg_c: "Package C",
 }
 
-/** Format a Date as "YYYY-MM-DD HH:MM:SS" in LOCAL (PH) time — no UTC conversion */
 function toLocalDtString(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0")
   return (
-    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
-    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}+08:00`
   )
 }
 
-// ─── Upsert booking (writes to both __meta__ notes AND relational tables) ─────
+// ─── Upsert booking ───────────────────────────────────────────────────────────
 
 async function upsertBooking(
   form: {
@@ -527,21 +498,19 @@ async function upsertBooking(
     return null
   }
 
-  // Compute end datetime
   const isMakeupOnly   = form.service === "makeup_only"
   const makeupExtraMins = form.addons.makeup ? (form.makeupPeople ?? 1) * 60 : 0
   const baseMins = form.service === "studio_rental"
     ? (form.studioHours ?? 1) * 60
     : isMakeupOnly
       ? 60
-      : form.duration  // dialog sets duration = sets × 120 for photoshoots
+      : form.duration 
   const endDt = new Date(startDt.getTime() + (baseMins + makeupExtraMins) * 60000)
 
   const finalMethod = form.paymentMethod === "other"
     ? form.paymentMethodOther
     : form.paymentMethod
 
-  // Encode all config into notes so we can restore it on next load
   const notesValue = buildNotes(
     {
       photographer:    form.addons.photographer,
@@ -555,12 +524,9 @@ async function upsertBooking(
     form.notes
   )
 
-  // ── Resolve relational IDs in background (non-blocking for the main save) ───
   const isStudioRental = form.service === "studio_rental"
   const isPhotoshoot   = ["pkg_a", "pkg_b", "pkg_c"].includes(form.service)
-  // isMakeupOnly already declared above
 
-  // Resolve service_id
   let serviceId: number | null = null
   let packageId: number | null = null
   let packageVariationId: number | null = null
@@ -585,7 +551,6 @@ async function upsertBooking(
       }
     }
   } else if (isMakeupOnly) {
-    // Makeup-only: look up the makeup service row (service_id = 3 in your DB)
     serviceId = await resolveServiceId("Makeup")
     if (!serviceId) serviceId = await resolveServiceId("Hair")
     if (serviceId) {
@@ -593,7 +558,6 @@ async function upsertBooking(
     }
   }
 
-  // ── Resolve / create user ───────────────────────────────────────────────────
   let userId: string | null = null
 
   if (form.email.trim()) {
@@ -622,7 +586,6 @@ async function upsertBooking(
     }
   }
 
-  // ── Build makeup_service_id (studio rental addon OR standalone makeup_only) ──
   const bookingMakeupServiceId =
     (isStudioRental && form.addons.makeup) || isMakeupOnly
       ? makeupServiceId
@@ -633,9 +596,6 @@ async function upsertBooking(
     : isMakeupOnly                          ? (form.makeupOnlyPeople ?? 1)
     : undefined
 
-  // ── Conflict check — prevent double-booking ────────────────────────────────
-  // Query for any pending/approved booking that overlaps [startDt, endDt),
-  // excluding the booking currently being edited.
   {
     const startIso = toLocalDtString(startDt)
     const endIso   = toLocalDtString(endDt)
@@ -644,8 +604,8 @@ async function upsertBooking(
       .from("bookings")
       .select("id", { count: "exact", head: true })
       .in("status", ["pending", "approved"])
-      .lt("start_datetime", endIso)   // existing.start < newEnd
-      .gt("end_datetime",   startIso) // existing.end   > newStart
+      .lt("start_datetime", endIso)
+      .gt("end_datetime",   startIso)
 
     if (editingId) {
       conflictQuery = conflictQuery.neq("id", editingId)
@@ -669,7 +629,6 @@ async function upsertBooking(
   }
 
   if (editingId) {
-    // ── UPDATE ──────────────────────────────────────────────────────────────
     const payload: Record<string, any> = {
       total_price:            calculatedPrice,
       start_datetime:         toLocalDtString(startDt),
@@ -677,7 +636,6 @@ async function upsertBooking(
       notes:                  notesValue,
       package_name_snapshot:  form.service,
       package_price_snapshot: calculatedPrice,
-      // Relational columns
       service_id:             serviceId             ?? undefined,
       package_id:             packageId             ?? undefined,
       package_variation_id:   packageVariationId    ?? undefined,
@@ -690,11 +648,9 @@ async function upsertBooking(
     const { error } = await supabase.from("bookings").update(payload).eq("id", editingId)
     if (error) { console.error("updateBooking:", error.message); return null }
 
-    // Sync booking_addons: clear old, re-insert
     await supabase.from("booking_addons").delete().eq("booking_id", editingId)
     await syncBookingAddons(editingId, form)
 
-    // Upsert payment
     const { data: existingPmt } = await supabase
       .from("payments").select("id").eq("booking_id", editingId)
       .order("created_at", { ascending: false }).limit(1)
@@ -717,7 +673,6 @@ async function upsertBooking(
     return editingId
 
   } else {
-    // ── INSERT ──────────────────────────────────────────────────────────────
     const { data: inserted, error } = await supabase
       .from("bookings")
       .insert({
@@ -730,7 +685,6 @@ async function upsertBooking(
         package_price_snapshot: calculatedPrice,
         status:                 "pending",
         payment_status:         "pending",
-        // Relational columns
         service_id:             serviceId             ?? undefined,
         package_id:             packageId             ?? undefined,
         package_variation_id:   packageVariationId    ?? undefined,
@@ -743,7 +697,6 @@ async function upsertBooking(
 
     if (error || !inserted) { console.error("insertBooking:", error?.message); return null }
 
-    // Write booking_addons
     await syncBookingAddons(inserted.id, form)
 
     if (finalMethod || form.paymentReference) {
@@ -759,9 +712,6 @@ async function upsertBooking(
     return inserted.id
   }
 }
-
-// ─── Write booking_addons rows ─────────────────────────────────────────────────
-// Only applies to Studio Rental bookings with add-ons selected.
 
 async function syncBookingAddons(
   bookingId: number,
@@ -787,13 +737,13 @@ async function syncBookingAddons(
     rows.push({
       booking_id: bookingId,
       addon_id: addonId,
-      addon_price_snapshot: 1500, // ADDON_PHOTOGRAPHER_PRICE
+      addon_price_snapshot: 1500, 
     })
   }
 
   if (makeup) {
     const addonId = await resolveMakeupAddonId()
-    const perPerson = 1200 // ADDON_MAKEUP_PRICE_PER_PERSON
+    const perPerson = 1200 
     rows.push({
       booking_id: bookingId,
       addon_id: addonId,
@@ -877,7 +827,6 @@ function AppointmentTable({
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 8
 
-  // ── Delete modal state ─────────────────────────────────────────────────────
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean
     ids: number[]
@@ -1057,7 +1006,6 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     let channel: any
-    let refreshTimer: number | undefined
 
     const setupRealtime = async () => {
       await loadAppointments()
@@ -1084,23 +1032,11 @@ export default function AppointmentsPage() {
 
     setupRealtime()
 
-    //refreshTimer = window.setInterval(() => {
-    //  void loadAppointments()
-    //}, 5000)
-
-    const refreshOnFocus = () => {
-      if (document.visibilityState !== "hidden") {
-        void loadAppointments()
-      }
-    }
-
-    window.addEventListener("focus", refreshOnFocus)
-    document.addEventListener("visibilitychange", refreshOnFocus)
+    // OPTIMIZATION: Removed window focus and visibility change event listeners.
+    // The realtime subscription natively handles syncing data without bombarding 
+    // the database every time you click back into the tab.
 
     return () => {
-      if (refreshTimer) window.clearInterval(refreshTimer)
-      window.removeEventListener("focus", refreshOnFocus)
-      document.removeEventListener("visibilitychange", refreshOnFocus)
       if (channel) {
         supabase.removeChannel(channel)
       }
@@ -1158,7 +1094,6 @@ export default function AppointmentsPage() {
       await loadAppointments()
       setOpen(false)
     }
-    // If newId is null (conflict or error), keep dialog open so user can fix it
   }
 
   const handleDelete = async (id: number) => {
@@ -1174,13 +1109,9 @@ export default function AppointmentsPage() {
   }
 
   const handleStatusChange = async (id: number, status: Status) => {
-    // Optimistic UI update
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
-
-    // Update status in DB
     await updateStatusInDb(id, status)
 
-    // Sync with Google Calendar
     if (status === "approved") {
       fetch("/api/calendar/sync", {
         method: "POST",

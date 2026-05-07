@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { Pencil, Trash2, Search, ChevronDown } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
+import Pagination from "@/components/admin/client/Pagination"
 
 type Client = {
   id: string
@@ -11,6 +12,8 @@ type Client = {
   email: string
   phone: string
 }
+
+const PAGE_SIZE = 10
 
 function useClients(initialData: Client[]) {
   const [search, setSearch] = useState("")
@@ -40,6 +43,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
 
   const [openAddDialog, setOpenAddDialog] = useState(false)
   const [openEditDialog, setOpenEditDialog] = useState(false)
@@ -81,6 +85,14 @@ export default function ClientsPage() {
   }, [loadClients])
 
   const { search, setSearch, sortBy, setSortBy, data } = useClients(clients)
+
+  // Reset to page 1 whenever search or sort changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, sortBy])
+
+  const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE))
+  const pagedData = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
@@ -288,14 +300,14 @@ export default function ClientsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.length === 0 ? (
+              {pagedData.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-10 text-center text-gray-400">
                     No clients found.
                   </td>
                 </tr>
               ) : (
-                data.map((client) => (
+                pagedData.map((client) => (
                   <tr key={client.id} className="border-t hover:bg-gray-50">
                     <td className="p-4">
                       <input type="checkbox" checked={selectedIds.includes(client.id)} onChange={() => toggleSelect(client.id)} />
@@ -328,6 +340,11 @@ export default function ClientsPage() {
             </tbody>
           </table>
         )}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {openAddDialog && (
