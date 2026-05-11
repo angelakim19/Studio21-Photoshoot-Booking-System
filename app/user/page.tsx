@@ -302,67 +302,71 @@ export default function Dashboard() {
       </section>
 
       {/* BOOKINGS */}
-      <section className="rounded-[28px] bg-[#fbf7f1] p-5 shadow-[0_18px_50px_rgba(17,17,17,0.08)] md:p-7">
-        <div className="mb-5 flex items-center justify-between">
+      <section className="rounded-[28px] bg-white border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 md:px-7 py-5 md:py-6 border-b border-gray-100">
+          <h2 className="text-xl font-semibold text-[#111111]">My Bookings</h2>
+          <p className="text-sm text-gray-500 mt-1">Your upcoming and recent sessions</p>
+        </div>
+
+        {bookings.length === 0 && (
+          <div className="px-5 md:px-7 py-8 text-gray-500">You have no bookings yet.</div>
+        )}
+
+        {bookings.length > 0 && (
           <div>
-            <h2 className="text-xl font-semibold text-[#111111]">My Bookings</h2>
-            <p className="text-sm text-gray-500">Your upcoming and recent sessions</p>
+            <div className="hidden bg-gray-50/50 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-gray-400 md:grid md:grid-cols-[1fr_1fr_2fr_1fr_0.9fr] md:gap-0 border-b border-gray-100">
+              <span className="px-5">Date</span>
+              <span className="px-5">Time</span>
+              <span className="px-5">Service</span>
+              <span className="px-5">Price</span>
+              <span className="px-5">Status</span>
+            </div>
+
+            <div className="divide-y divide-gray-100">
+              {bookings.map((b) => (
+                <div key={b.id} className="py-5">
+                  <div className="grid gap-3 md:grid-cols-[1fr_1fr_2fr_1fr_0.9fr] md:items-center md:gap-0">
+                    <div className="min-w-0 px-5">
+                      <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden mb-1">Date</p>
+                      <p className="font-medium text-[#111111]">{getDisplayDateTime(b).date}</p>
+                    </div>
+                    <div className="min-w-0 px-5">
+                      <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden mb-1">Time</p>
+                      <p className="font-medium text-[#111111]">{getDisplayTimeRange(b)}</p>
+                    </div>
+                    <div className="min-w-0 px-5">
+                      <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden mb-1">Service</p>
+                      <p className="font-medium text-[#111111]">{getSyncedDisplayService(b)}</p>
+                    </div>
+                    <div className="min-w-0 px-5">
+                      <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden">Price</p>
+                      <p className="font-semibold text-[#C8A96A]">₱{getDisplayPrice(b).toLocaleString()}</p>
+                    </div>
+
+                    <div className="min-w-0 px-5">
+                      <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden mb-1">Status</p>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${
+                          normalizeBookingStatus(b.status) === "approved"
+                            ? "bg-green-100 text-green-700"
+                            : normalizeBookingStatus(b.status) === "cancelled"
+                              ? "bg-gray-100 text-gray-600"
+                              : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {normalizeBookingStatus(b.status) === "approved"
+                          ? "Approved"
+                          : normalizeBookingStatus(b.status) === "cancelled"
+                            ? "Cancelled"
+                            : "Pending"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-
-        <div className="space-y-3">
-          {bookings.length === 0 && <p className="text-gray-500">You have no bookings yet.</p>}
-
-          {bookings.length > 0 && (
-            <div className="hidden rounded-2xl border border-[#ece4d7] bg-[#f6efe2] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#7a6542] md:grid md:grid-cols-4">
-              <span>Date</span>
-              <span>Time</span>
-              <span>Service</span>
-              <span className="text-right">Price</span>
-            </div>
-          )}
-
-          {bookings.map((b) => (
-            <div key={b.id} className="rounded-2xl border border-[#ece4d7] bg-white px-4 py-4 shadow-sm">
-              <div className="grid gap-3 md:grid-cols-4 md:items-center">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden">Date</p>
-                  <p className="font-medium text-[#111111]">{getDisplayDateTime(b).date}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden">Time</p>
-                  <p className="font-medium text-[#111111]">{getDisplayTimeRange(b)}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden">Service</p>
-                  <p className="font-medium text-[#111111]">{getSyncedDisplayService(b)}</p>
-                </div>
-                <div className="md:text-right">
-                  <p className="text-xs uppercase tracking-[0.1em] text-gray-500 md:hidden">Price</p>
-                  <p className="font-semibold text-[#C8A96A]">₱{getDisplayPrice(b).toLocaleString()}</p>
-                </div>
-              </div>
-
-              <div className="mt-3 flex justify-end">
-                <span
-                  className={`text-sm px-3 py-1 rounded-full ${
-                    normalizeBookingStatus(b.status) === "approved"
-                      ? "bg-green-100 text-green-600"
-                      : normalizeBookingStatus(b.status) === "cancelled"
-                        ? "bg-red-100 text-red-600"
-                        : "bg-yellow-100 text-yellow-600"
-                  }`}
-                >
-                  {normalizeBookingStatus(b.status) === "approved"
-                    ? "Approved"
-                    : normalizeBookingStatus(b.status) === "cancelled"
-                      ? "Cancelled"
-                      : "Pending"}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+        )}
       </section>
 
     </div>
