@@ -324,6 +324,23 @@ export function BookingStep4() {
                 A <span className="font-semibold text-[#C8A96A]">50% downpayment</span> is required to secure your booking. 
                 The remaining balance will be paid at the studio on your appointment day.
               </p>
+              <div className="text-sm space-y-1 border-t pt-3">
+                <p className="font-semibold">Payment Details</p>
+
+                <p>
+                  <span className="font-medium">GCash:</span> 09266000600
+                </p>
+                <p className="text-muted-foreground">
+                  Account Name: Mark Angelo Flores
+                </p>
+
+                <p className="mt-2">
+                  <span className="font-medium">BPI:</span> 9011-3386-926
+                </p>
+                <p className="text-muted-foreground">
+                  Account Name: Brent Kyle Tago
+                </p>
+              </div>
             </div>
 
             {/* 💳 PAYMENT INPUTS */}
@@ -397,8 +414,10 @@ export function BookingStep4() {
         <div className="text-sm">
           <p className="font-semibold text-amber-800">Cancellation Policy</p>
           <p className="text-amber-700 mt-1">
-            Appointments are non-cancellable once booked. 
-            If you wish to request a cancellation or rescheduling, please visit the studio directly for assistance.
+            Appointments are non-cancellable once booked. If you wish to request a cancellation or rescheduling, please visit the studio directly for assistance.
+            <br />
+            <br />
+            If you opted to pay for the appointment in cash, please visit the studio directly. Kindly ensure that the selected payment method and reference number provided are correct. Submission of an incorrect payment method or invalid reference number may result in the automatic cancellation of your appointment.
           </p>
         </div>
       </div>
