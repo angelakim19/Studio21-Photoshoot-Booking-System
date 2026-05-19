@@ -93,6 +93,9 @@ export function Header() {
         {isMenuOpen && (
           <div className="md:hidden py-4 border-t border-border">
             <nav className="flex flex-col gap-4">
+              <Link href="/our-story" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+                Our Story
+              </Link>
               <Link href="/#services" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
                 Services
               </Link>
@@ -101,6 +104,9 @@ export function Header() {
               </Link>
               <Link href="/#location" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
                 Location
+              </Link>
+              <Link href="/our-work" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+                Our Works
               </Link>
               <button
                 onClick={handleBooking}
